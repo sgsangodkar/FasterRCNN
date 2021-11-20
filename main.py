@@ -14,7 +14,9 @@ Created on Sat Nov 20 14:16:06 2021
 import torch
 from torchvision import models
 
+from xml_parser import ParseGTxmls
 from model_definations import RPN, FeatureExtractor
+from dataset import VOCDataset
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -35,3 +37,10 @@ print(fe(dummy_image.to(device)).shape)
 
 aspect_ratios = [0.5,1,2]
 anchor_scales = [128,256,512]
+
+data_path = '/home/sagar/Desktop/voc_data/VOCdevkit/VOC2012'
+data_type = 'trainval'
+
+gt_parser = ParseGTxmls(data_path, data_type)
+anchors = generate_anchors(f_size, receptive_field, scales, ratios)
+trainset = VOCDataset(data_path, data_type, None, gt_parser, anchors)
