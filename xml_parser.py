@@ -20,7 +20,7 @@ class ParseGTxmls(object):
         with open(ids_file, 'r') as f:
             self.img_ids = [x.strip() for x in f.readlines()]    
             
-    def get_gt_class_and_bbox(self, idx):
+    def get_gt_data(self, idx):
         bboxes = []
         classes = []
         difficult = []
@@ -29,6 +29,9 @@ class ParseGTxmls(object):
                                 self.img_ids[idx]+'.xml')
         tree = ET.parse(xml_path)
         objects = tree.findall('object')    
+        
+        img_path = os.path.join(self.data_path, 'JPEGImages', self.img_ids[idx]+'.jpg')     
+
         for obj in objects:
             bndbox = obj.find('bndbox')
             xmin = int(bndbox.find('xmin').text) - 1
@@ -38,13 +41,12 @@ class ParseGTxmls(object):
             bboxes.append((xmin,ymin,xmax,ymax))
             classes.append(obj.find('name').text)
             difficult.append(obj.find('difficult').text)
-                
-        return (self.img_ids[idx], 
-               dict(classes = classes,
-                    bboxes = bboxes,
-                    difficult = difficult
+            
+        return dict(img_path = img_path,
+                     classes = classes,
+                     bboxes = bboxes,
+                     difficult = difficult
                )
-        )
     
         
      
