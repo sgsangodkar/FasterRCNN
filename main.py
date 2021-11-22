@@ -18,8 +18,10 @@ from xml_parser import ParseGTxmls
 from model_definations import RPN, FeatureExtractor
 from dataset import VOCDataset
 import cv2
+from loss import rpn_loss
 import numpy as np
 import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader, random_split
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -51,17 +53,29 @@ anchor_params = dict(receptive_field=16,
                      ratios = [0.5,1,2]
                 )
 
-trainset = VOCDataset(transform, gt_parser, anchor_params)
-a,b,c = trainset[5]
+dataset = VOCDataset(transform, gt_parser, anchor_params)
+lengths = [int(0.9*len(dataset)), int(0.1*len(dataset))]
+trainset, valset = random_split(dataset, lengths)
+
+train_dataloader = DataLoader(trainset, 
+                              batch_size=1, 
+                              shuffle=True, 
+                              pin_memory=True
+                   )
 
 
+val_dataloader = DataLoader(valset, 
+                            batch_size=1, 
+                            shuffle=False, 
+                            pin_memory=True
+                 )
+"""
+trained_model = train(model, dataloaders, optimizer)           
+           
 img = np.zeros(a.shape[1:3])
 for idx in range(len(b)):
     start = (int(b[idx][0]), int(b[idx][1]))
     end = (int(b[idx][2]), int(b[idx][3]))
-    img = cv2.rectangle(img, start, end, (255, 255, 255), 1)
-for cx in c:
-    start = (int(cx[0]), int(cx[1]))
-    end = (int(cx[2]), int(cx[3]))
-    img = cv2.rectangle(img, start, end, (255, 255, 255), 3)    
+    img = cv2.rectangle(img, start, end, (255, 255, 255), 1)  
 plt.imshow(img, 'gray')
+"""

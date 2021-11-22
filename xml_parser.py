@@ -16,7 +16,8 @@ class ParseGTxmls(object):
     def __init__(self, data_path, data_type):
         super().__init__()
         self.data_path = data_path
-        ids_file = os.path.join(data_path,'ImageSets/Main', data_type+'.txt')  
+        self.data_type = data_type
+        ids_file = os.path.join(self.data_path,'ImageSets/Main', self.data_type+'.txt')  
         with open(ids_file, 'r') as f:
             self.img_ids = [x.strip() for x in f.readlines()]    
             

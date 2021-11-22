@@ -14,7 +14,7 @@ class FeatureExtractor(nn.Module):
     def __init__(self, model_name):
         super().__init__()
         if model_name == 'vgg16':
-            model = models.vgg16(pretrained=True)
+            model = models.vgg16(pretrained=True, progress=False)
             self.fe = model.features[:-1]   
         else:
             print('Invalid model name')
