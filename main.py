@@ -22,22 +22,24 @@ from loss import rpn_loss
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, random_split
+from train import train_model
+import torch.optim as optim
+from torch.optim import lr_scheduler
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 fe = FeatureExtractor('vgg16').to(device)
+rpn = RPN(512, 512, 9).to(device)
+models_dict = dict(fe=fe, rpn=rpn)
 
-rpn = RPN(512, 512, 9)
+#dummy_image = torch.zeros((1, 3, 600, 600)).float()
+
+#bbox = torch.FloatTensor([[20, 30, 400, 500], [300, 400, 500, 600]]) # [y1, x1, y2, x2] format
+#labels = torch.LongTensor([6, 8]) # 0 represents background
 
 
-dummy_image = torch.zeros((1, 3, 600, 600)).float()
-
-bbox = torch.FloatTensor([[20, 30, 400, 500], [300, 400, 500, 600]]) # [y1, x1, y2, x2] format
-labels = torch.LongTensor([6, 8]) # 0 represents background
-
-
-print(fe(dummy_image.to(device)).shape)
+#print(fe(dummy_image.to(device)).shape)
 
 data_path = '/home/sagar/Desktop/voc_data/VOCdevkit/VOC2012'
 data_type = 'trainval'
@@ -69,9 +71,19 @@ val_dataloader = DataLoader(valset,
                             shuffle=False, 
                             pin_memory=True
                  )
-"""
-trained_model = train(model, dataloaders, optimizer)           
-           
+dataloaders = dict(train = train_dataloader, val = val_dataloader)
+
+optimizer = optim.SGD([
+                {'params': models_dict['fe'].fe[10:].parameters()},
+                {'params': models['rpn'].parameters()} 
+            ], lr=0.001, weight_decay=0.0005)
+
+# Decay LR by a factor of 0.1 every 10 epochs
+scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+
+trained_model = train_model(models_dict, dataloaders, optimizer, scheduler, num_epochs=25)           
+ 
+"""          
 img = np.zeros(a.shape[1:3])
 for idx in range(len(b)):
     start = (int(b[idx][0]), int(b[idx][1]))

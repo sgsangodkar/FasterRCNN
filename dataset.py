@@ -7,6 +7,7 @@ Created on Sat Nov 20 10:40:56 2021
 """
 import os
 import cv2
+import torch
 import numpy as np
 from torchvision import datasets
 from torch.utils.data import Dataset
@@ -41,5 +42,5 @@ class VOCDataset(Dataset):
 
         anchors = get_t_parameters(anchors, bboxes, gt_bboxes_id)
 
-        return img, anchors, anchor_labels
+        return img, torch.tensor(anchor_labels, dtype=torch.long), torch.tensor(anchors)
                
