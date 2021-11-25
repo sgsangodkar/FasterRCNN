@@ -32,7 +32,7 @@ def rpn_loss(pred_logits, pred_reg, gt_cls, gt_reg):
         
     cls_loss = rpn_cls_loss(pred_logits, gt_cls, ids)
     reg_loss = rpn_reg_loss(pred_reg, gt_reg, gt_cls, mask)
-    print(cls_loss,reg_loss)
+    #print(cls_loss.item(),reg_loss.item())
     
-    return cls_loss+reg_loss
+    return cls_loss+reg_loss, cls_loss, reg_loss
 
