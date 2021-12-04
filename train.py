@@ -10,12 +10,14 @@ import time
 import torch
 import copy
 from loss import rpn_loss
+from tqdm import tqdm
+
 #from torch.utils.tensorboard import SummaryWriter
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-def train_model(models, dataloaders, optimiser, scheduler, num_epochs):
+def train_model(models, dataloaders, optimizer, scheduler, num_epochs):
     best_loss = 1e5
     since = time.time()
     #Writer will output to ./runs/ directory by default
@@ -26,6 +28,7 @@ def train_model(models, dataloaders, optimiser, scheduler, num_epochs):
         for phase in ['train', 'val']:
 
             epoch_loss = 0
+            running_loss = 0
             
             if phase == 'train':
                 models['fe'].train()
@@ -33,32 +36,47 @@ def train_model(models, dataloaders, optimiser, scheduler, num_epochs):
             else:
                 models['fe'].eval()
                 models['rpn'].eval()
-                
+            
+            acc_steps = 8
             num_images = 0
-            for image, cls_gt, reg_gt in dataloaders[phase]:
+            
+            optimizer.zero_grad()
+            
+            for image, cls_gt, reg_gt in tqdm(dataloaders[phase]):
                 image = image.to(device)
                 cls_gt = cls_gt.squeeze().to(device)
                 reg_gt = reg_gt.squeeze().to(device)
                 
-                optimiser.zero_grad()
+                
                 
                 with torch.set_grad_enabled(phase=='train'):
                     features = models['fe'](image)
                     cls_op, reg_op = models['rpn'](features)  
-                    
+                
                 cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
                 reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()                    
-                #print((cls_op.dtype), (reg_op.dtype), (cls_gt.dtype), (reg_gt.dtype))
+
                 loss = rpn_loss(cls_op, reg_op, cls_gt, reg_gt)
-                #print(loss)
+                
+                # epoch statistics
+                epoch_loss += loss.item()  
+                running_loss += loss.item()
+                
+                
             
                 if phase == 'train':
+                    loss = loss / acc_steps 
                     loss.backward()
-                    optimiser.step()
-
-                # epoch statistics
+                    if (num_images+1)%acc_steps == 0: # Wait for several backward steps
+                            optimizer.step()          # Now we can do an optimizer step
+                            optimizer.zero_grad()
+        
                 num_images += 1
-                epoch_loss += loss.item()       
+
+                
+                if (num_images+1)%100 == 0:
+                    print('Iter: {}. Loss: {:.4f}'.format(num_images+1, running_loss/100))
+                    running_loss = 0
                             
             if phase == 'train':
                 scheduler.step()

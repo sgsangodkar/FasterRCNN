@@ -13,8 +13,11 @@ def rpn_cls_loss(pred_logits, gt_cls, ids):
     return loss
 
 def rpn_reg_loss(pred_reg, gt_reg, gt_cls, mask):
-    loss = F.smooth_l1_loss(pred_reg[mask], gt_reg[mask])
-    return loss
+    if len(mask[0])>0:
+        loss = F.smooth_l1_loss(pred_reg[mask], gt_reg[mask])
+        return loss
+    else:
+        return torch.tensor(0)
 
 def rpn_loss(pred_logits, pred_reg, gt_cls, gt_reg):
     positives = torch.where(gt_cls==1)[0]
@@ -32,7 +35,7 @@ def rpn_loss(pred_logits, pred_reg, gt_cls, gt_reg):
         
     cls_loss = rpn_cls_loss(pred_logits, gt_cls, ids)
     reg_loss = rpn_reg_loss(pred_reg, gt_reg, gt_cls, mask)
-    #print(cls_loss,reg_loss)
+    #print(cls_loss,reg_loss, len(mask[0]))
     #print(cls_loss.dtype, reg_loss.dtype)
     return cls_loss+ 10*reg_loss
 

@@ -142,3 +142,10 @@ b = np.array([2,3,5])
 c = set(a) ^ set(b)
 
 print(c, np.array(list(c)))
+
+
+###############################
+from tqdm import tqdm
+import time
+for i in tqdm(a, desc = 'tqdm() Progress Bar'):
+    time.sleep(0.5)
