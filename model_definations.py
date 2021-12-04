@@ -9,6 +9,7 @@ Created on Sat Nov 20 14:16:06 2021
 import torch
 import torch.nn as nn
 from torchvision import models
+import torch.nn.functional as F
 
 class FeatureExtractor(nn.Module):
     def __init__(self, model_name):
@@ -41,7 +42,7 @@ class RPN(nn.Module):
         self.regressor.bias.data.zero_()
         
     def forward(self, x):
-        x = self.conv3x3(x)
+        x = F.relu(self.conv3x3(x))
         cls_scores = self.classifier(x)
         reg_coor = self.regressor(x)
         

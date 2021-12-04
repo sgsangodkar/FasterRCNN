@@ -42,5 +42,5 @@ class VOCDataset(Dataset):
 
         anchors = get_t_parameters(anchors, bboxes, gt_bboxes_id)
 
-        return img, torch.tensor(anchor_labels, dtype=torch.long), torch.tensor(anchors)
+        return img, torch.tensor(anchor_labels, dtype=torch.long), torch.tensor(anchors, dtype=torch.float)
                
