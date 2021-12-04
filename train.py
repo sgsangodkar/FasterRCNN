@@ -15,7 +15,7 @@ from loss import rpn_loss
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-def train_model(models, dataloaders, criterion, optimiser, scheduler, num_epochs):
+def train_model(models, dataloaders, optimiser, scheduler, num_epochs):
     best_loss = 1e5
     since = time.time()
     #Writer will output to ./runs/ directory by default
@@ -48,7 +48,7 @@ def train_model(models, dataloaders, criterion, optimiser, scheduler, num_epochs
                     
                 cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
                 reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()                    
-                loss = criterion(cls_op, reg_op, cls_gt, reg_gt)
+                loss = rpn_loss(cls_op, reg_op, cls_gt, reg_gt)
             
                 if phase == 'train':
                     loss.backward()

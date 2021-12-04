@@ -75,7 +75,7 @@ dataloaders = dict(train = train_dataloader, val = val_dataloader)
 
 optimizer = optim.SGD([
                 {'params': models_dict['fe'].fe[10:].parameters()},
-                {'params': models['rpn'].parameters()} 
+                {'params': models_dict['rpn'].parameters()} 
             ], lr=0.001, weight_decay=0.0005)
 
 # Decay LR by a factor of 0.1 every 10 epochs
