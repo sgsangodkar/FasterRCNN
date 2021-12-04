@@ -47,8 +47,11 @@ data_type = 'trainval'
 transform = transforms.Compose([
                 transforms.ToPILImage(),
                 transforms.Resize(600),
-                transforms.ToTensor()]
-        )
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), 
+                                     (0.229, 0.224, 0.225))
+            ])
+                
 gt_parser = ParseGTxmls(data_path, data_type)
 anchor_params = dict(receptive_field=16,
                      scales = [8,16,32],
@@ -76,12 +79,12 @@ dataloaders = dict(train = train_dataloader, val = val_dataloader)
 optimizer = optim.SGD([
                 {'params': models_dict['fe'].fe[10:].parameters()},
                 {'params': models_dict['rpn'].parameters()} 
-            ], lr=0.001, weight_decay=0.0005)
+            ], lr=0.001, weight_decay=0.0005, momentum=0.9)
 
 # Decay LR by a factor of 0.1 every 10 epochs
 scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
 
-trained_model = train_model(models_dict, dataloaders, optimizer, scheduler, num_epochs=25)           
+trained_model = train_model(models_dict, dataloaders, optimizer, scheduler, num_epochs=7)           
  
 """          
 img = np.zeros(a.shape[1:3])

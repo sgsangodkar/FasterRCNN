@@ -29,16 +29,14 @@ class VOCDataset(Dataset):
         img_np = cv2.imread(gt_data['img_path'])
         if self.transform is not None:
             img = self.transform(img_np)
-        s_x = img.shape[1]/img_np.shape[0]
-        s_y = img.shape[2]/img_np.shape[1]
+            
+        s_x = img.shape[1]/img_np.shape[0] #vertical
+        s_y = img.shape[2]/img_np.shape[1] #horizontal
+        
         bboxes = scale_bboxes(bboxes, s_x, s_y)
-        anchors = generate_anchors(img.shape[1:3], 
-                                   self.anchor_params['receptive_field'], 
-                                   self.anchor_params['scales'], 
-                                   self.anchor_params['ratios']
-                  )
+        anchors = generate_anchors(img.shape[1:3], self.anchor_params)
 
-        anchor_labels, gt_bboxes_id = assign_label_and_gt_bbox(anchors, bboxes)
+        anchor_labels, gt_bboxes_id = assign_label_and_gt_bbox(anchors, bboxes, img.shape[1:3])
 
         anchors = get_t_parameters(anchors, bboxes, gt_bboxes_id)
 

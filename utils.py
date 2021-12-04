@@ -6,14 +6,20 @@ Created on Sat Nov 20 17:59:22 2021
 @author: sagar
 """
 import cv2
+import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
 
     
-def generate_anchors(img_size, receptive_field, scales, ratios):  
+def generate_anchors(img_size, anchor_params):  
+    
+    receptive_field = anchor_params['receptive_field']
+    scales = anchor_params['scales']
+    ratios = anchor_params['ratios']
+    
     cx, cy = ((receptive_field-1)/2, (receptive_field-1)/2)  
-    img_sizex, img_sizey = img_size  
+    img_sizey, img_sizex = img_size  
     f_sizex = img_sizex//receptive_field
     f_sizey = img_sizey//receptive_field
    
@@ -34,8 +40,8 @@ def generate_anchors(img_size, receptive_field, scales, ratios):
             h_a = np.round(w_a*ratios[i])          
             for j in range(len(scales)):
                 anchors.append([
-                                cx-0.5*(w_a*scales[j]-1), cy-0.5*(h_a*scales[j]-1),
-                                cx+0.5*(w_a*scales[j]-1), cy+0.5*(h_a*scales[j]-1)
+                                int(cx-0.5*(w_a*scales[j]-1)), int(cy-0.5*(h_a*scales[j]-1)),
+                                int(cx+0.5*(w_a*scales[j]-1)), int(cy+0.5*(h_a*scales[j]-1))
                               ])
     return np.array(anchors)
 
@@ -60,7 +66,7 @@ def obtain_iou_matrix(anchors, bboxes):
             iou_matrix[i,j] = calculate_iou(anchor, bbox)
     return iou_matrix
 
-def assign_label_and_gt_bbox(anchors, bboxes):
+def assign_label_and_gt_bbox(anchors, bboxes, img_size, allowed_border=0):
     anchor_labels = np.empty(len(anchors), dtype=np.int32)
     anchor_labels.fill(-1)
     
@@ -70,17 +76,33 @@ def assign_label_and_gt_bbox(anchors, bboxes):
     anchor_labels[max_iou_per_anchor>0.7] = 1
     anchor_labels[min_iou_per_anchor<0.3] = 0
     
-    max_iou_per_bbox = np.max(iou_matrix, axis=0)
-    for i in range(len(bboxes)):
-        anchor_labels[iou_matrix[:,i]==max_iou_per_bbox[i]] = 1
+    if np.sum(anchor_labels==1)==0:
+        max_iou_per_bbox = np.max(iou_matrix, axis=0)
+        for i in range(len(bboxes)):
+            anchor_labels[iou_matrix[:,i]==max_iou_per_bbox[i]] = 1
 
+    inds_inside = np.where(
+        (anchors[:, 0] >= -allowed_border) &
+        (anchors[:, 1] >= -allowed_border) &
+        (anchors[:, 2] < img_size[1] + allowed_border) &  # width
+        (anchors[:, 3] < img_size[0] + allowed_border)    # height
+    )[0]
+    inds_outside = set(np.arange(len(anchors))).difference(set(inds_inside))
+    inds_outside = np.array(list(inds_outside))
+    anchor_labels[inds_outside] = -1
+    
     return anchor_labels, np.argmax(iou_matrix,1)       
 
 def scale_bboxes(bboxes, sx, sy):
+    bboxes_scaled = copy.deepcopy(bboxes)
     for i, bbox in enumerate(bboxes):
-        bboxes[i] = [bbox[0]*sx, bbox[1]*sy, bbox[2]*sx, bbox[3]*sy]
+        bboxes_scaled[i] = [int(bbox[0]*sx), 
+                            int(bbox[1]*sy), 
+                            int(bbox[2]*sx), 
+                            int(bbox[3]*sy)
+                           ]
         
-    return bboxes
+    return bboxes_scaled
 
 def get_txtytwth(anchor, bbox):
     w = bbox[2] - bbox[0]
@@ -104,8 +126,8 @@ def get_t_parameters(anchors, bboxes, gt_bboxes_id):
     anchors_final = []
     for i in range(len(anchors)):
         anchors_final.append(get_txtytwth(anchors[i], bboxes[gt_bboxes_id[i]]))
-    return np.array(anchors_final)
-
+    return np.array(anchors_final, dtype=np.float32)
+"""
 if __name__ == '__main__': 
     t = time.time()
     anchors = generate_anchors((600, 600), 16, [8,16,32], [0.5,1,2])
@@ -120,3 +142,14 @@ if __name__ == '__main__':
         img = cv2.rectangle(img, start, end, (255, 255, 255), 1)
         
     plt.imshow(img, 'gray')
+"""    
+    
+if __name__ == '__main__':
+    anchor_params = dict(receptive_field=16,
+                     scales = [8,16,32],
+                     ratios = [0.5,1,2]
+                )
+    anchors = generate_anchors([600,600], anchor_params)
+
+    print(anchors)
+    print(anchors.shape)

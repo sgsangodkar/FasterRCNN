@@ -48,7 +48,9 @@ def train_model(models, dataloaders, optimiser, scheduler, num_epochs):
                     
                 cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
                 reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()                    
+                #print((cls_op.dtype), (reg_op.dtype), (cls_gt.dtype), (reg_gt.dtype))
                 loss = rpn_loss(cls_op, reg_op, cls_gt, reg_gt)
+                #print(loss)
             
                 if phase == 'train':
                     loss.backward()
