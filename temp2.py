@@ -158,7 +158,8 @@ models_dict['rpn'].eval()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 #for image, cls_gt, reg_gt in tqdm(train_dataloader):
-image, cls_gt, reg_gt = next(iter(val_dataloader))
+it=iter(train_dataloader)
+image, cls_gt, reg_gt = next(it)
 image = image.to(device)
 cls_gt = cls_gt.squeeze().to(device)
 reg_gt = reg_gt.squeeze().to(device)

@@ -34,8 +34,8 @@ rpn = RPN(512, 512, 9).to(device)
 models_dict = dict(fe=fe, rpn=rpn)
 
 
-#fe.load_state_dict(torch.load('t_checkpoint_fe.pt' ,map_location=torch.device('cpu')))
-#rpn.load_state_dict(torch.load('t_checkpoint_rpn.pt', map_location=torch.device('cpu')))
+fe.load_state_dict(torch.load('checkpoint_fe.pt' ,map_location=torch.device('cpu')))
+rpn.load_state_dict(torch.load('checkpoint_rpn.pt', map_location=torch.device('cpu')))
                 
 #dummy_image = torch.zeros((1, 3, 600, 600)).float()
 

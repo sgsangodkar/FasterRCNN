@@ -105,13 +105,13 @@ def scale_bboxes(bboxes, sx, sy):
     return bboxes_scaled
 
 def get_txtytwth(anchor, bbox):
-    w = bbox[2] - bbox[0]+1
-    h = bbox[3] - bbox[1]+1
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
     x = bbox[0] + 0.5*w
     y = bbox[1] + 0.5*h
     
-    w_a = anchor[2] - anchor[0]+1
-    h_a = anchor[3] - anchor[1]+1
+    w_a = anchor[2] - anchor[0]
+    h_a = anchor[3] - anchor[1]
     x_a = anchor[0] + 0.5*w_a
     y_a = anchor[1] + 0.5*h_a
     

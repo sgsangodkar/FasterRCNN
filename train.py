@@ -99,7 +99,7 @@ def train_model(models, dataloaders, optimizer, scheduler, num_epochs):
                 scheduler.step()
             
             epoch_loss = (epoch_cls_loss/epoch_cls_cnt) + (epoch_reg_loss/epoch_reg_cnt)
-            epoch_loss /= num_images
+            #epoch_loss /= num_images
 
             print('{}. Loss: {:.4f}'.format(phase, epoch_loss))
 
