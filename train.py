@@ -67,8 +67,8 @@ def train_model(models, dataloaders, optimizer, scheduler, num_epochs):
                 epoch_cls_loss += cls_tuple[0].item()   
                 epoch_cls_cnt += cls_tuple[1]   
                 
-                if reg_tuple[1] != 0:
-                    epoch_reg_loss += reg_tuple[0].item()   
+                
+                epoch_reg_loss += reg_tuple[0].item()   
                 epoch_reg_cnt += reg_tuple[1]   
              
                 if phase == 'train':
@@ -78,7 +78,9 @@ def train_model(models, dataloaders, optimizer, scheduler, num_epochs):
                     reg_loss = reg_tuple[0]/reg_tuple[1]
                     
                     cls_loss.backward(retain_graph=True)
-                    reg_loss.backward()
+                    
+                    if reg_tuple[1] != 0:
+                        reg_loss.backward()
                     
                     optimizer.step()
              
