@@ -33,6 +33,10 @@ fe = FeatureExtractor('vgg16').to(device)
 rpn = RPN(512, 512, 9).to(device)
 models_dict = dict(fe=fe, rpn=rpn)
 
+
+#fe.load_state_dict(torch.load('t_checkpoint_fe.pt' ,map_location=torch.device('cpu')))
+#rpn.load_state_dict(torch.load('t_checkpoint_rpn.pt', map_location=torch.device('cpu')))
+                
 #dummy_image = torch.zeros((1, 3, 600, 600)).float()
 
 #bbox = torch.FloatTensor([[20, 30, 400, 500], [300, 400, 500, 600]]) # [y1, x1, y2, x2] format
@@ -59,7 +63,7 @@ anchor_params = dict(receptive_field=16,
                 )
 
 dataset = VOCDataset(transform, gt_parser, anchor_params)
-lengths = [int(0.9*len(dataset)), int(0.1*len(dataset))]
+lengths = [int(0.8*len(dataset)), int(0.2*len(dataset))]
 trainset, valset = random_split(dataset, lengths)
 
 train_dataloader = DataLoader(trainset, 
@@ -82,7 +86,7 @@ optimizer = optim.SGD([
             ], lr=0.001, weight_decay=0.0005, momentum=0.9)
 
 # Decay LR by a factor of 0.1 every 10 epochs
-scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+scheduler = lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
 trained_model = train_model(models_dict, dataloaders, optimizer, scheduler, num_epochs=7)           
  

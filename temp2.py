@@ -149,3 +149,28 @@ from tqdm import tqdm
 import time
 for i in tqdm(a, desc = 'tqdm() Progress Bar'):
     time.sleep(0.5)
+    
+###################################
+
+models_dict['fe'].eval()
+models_dict['rpn'].eval()
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+#for image, cls_gt, reg_gt in tqdm(train_dataloader):
+image, cls_gt, reg_gt = next(iter(val_dataloader))
+image = image.to(device)
+cls_gt = cls_gt.squeeze().to(device)
+reg_gt = reg_gt.squeeze().to(device)
+
+with torch.set_grad_enabled(False):
+    features = models_dict['fe'](image)
+    cls_op, reg_op = models_dict['rpn'](features)  
+
+cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
+reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()                    
+
+#print(reg_op[cls_gt==1])
+#print(reg_gt[cls_gt==1])
+
+print(rpn_loss(cls_op, reg_op, cls_gt, reg_gt))
