@@ -45,7 +45,7 @@ models_dict = dict(fe=fe, rpn=rpn)
 
 #print(fe(dummy_image.to(device)).shape)
 
-data_path = '/home/sagar/Desktop/voc_data/VOCdevkit/VOC2012'
+data_path = '../voc_data/VOCdevkit/VOC2012'
 data_type = 'trainval'
 
 transform = transforms.Compose([

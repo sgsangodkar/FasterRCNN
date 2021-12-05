@@ -170,7 +170,10 @@ with torch.set_grad_enabled(False):
 cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
 reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()                    
 
-#print(reg_op[cls_gt==1])
-#print(reg_gt[cls_gt==1])
+print(reg_op[cls_gt==1])
+print(reg_gt[cls_gt==1])
 
 print(rpn_loss(cls_op, reg_op, cls_gt, reg_gt))
+
+####################
+(pred_logits, pred_reg, gt_cls, gt_reg) = (cls_op, reg_op, cls_gt, reg_gt)
