@@ -1,22 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sat Nov 20 17:59:22 2021
+Created on Fri Dec 10 12:31:47 2021
 
 @author: sagar
 """
-import cv2
-import copy
-import time
 import numpy as np
-import matplotlib.pyplot as plt
 
-    
-def generate_anchors(img_size, anchor_params):  
-    
-    receptive_field = anchor_params['receptive_field']
-    scales = anchor_params['scales']
-    ratios = anchor_params['ratios']
+def generate_anchors(img_size, receptive_field, scales, ratios):  
     
     cx, cy = ((receptive_field-1)/2, (receptive_field-1)/2)  
     img_sizey, img_sizex = img_size  
@@ -45,6 +36,8 @@ def generate_anchors(img_size, anchor_params):
                               ])
     return np.array(anchors)
 
+
+ 
 def calculate_iou(anchor, bbox):
     int_x = min(anchor[2], bbox[2]) - max(anchor[0], bbox[0])
     int_y = min(anchor[3], bbox[3]) - max(anchor[1], bbox[1])
@@ -59,97 +52,40 @@ def calculate_iou(anchor, bbox):
     
     return intersection/union
 
-def obtain_iou_matrix(anchors, bboxes):
-    iou_matrix = np.zeros((len(anchors), len(bboxes)))
-    for i, anchor in enumerate(anchors):
-        for j, bbox in enumerate(bboxes):
-            iou_matrix[i,j] = calculate_iou(anchor, bbox)
+def obtain_iou_matrix(bboxes1, bboxes2):
+    iou_matrix = np.zeros((len(bboxes1), len(bboxes2)))
+    for i, bbox1 in enumerate(bboxes1):
+        for j, bbox2 in enumerate(bboxes2):
+            iou_matrix[i,j] = calculate_iou(bbox1, bbox2)
     return iou_matrix
 
-def assign_label_and_gt_bbox(anchors, bboxes, img_size, allowed_border=0):
-    anchor_labels = np.empty(len(anchors), dtype=np.int32)
-    anchor_labels.fill(-1)
-    
-    iou_matrix = obtain_iou_matrix(anchors, bboxes)
-    max_iou_per_anchor = np.max(iou_matrix, axis=1)
-    min_iou_per_anchor = np.min(iou_matrix, axis=1)
-    anchor_labels[max_iou_per_anchor>0.7] = 1
-    anchor_labels[min_iou_per_anchor<0.3] = 0
-    
-    if np.sum(anchor_labels==1)==0:
-        max_iou_per_bbox = np.max(iou_matrix, axis=0)
-        for i in range(len(bboxes)):
-            anchor_labels[iou_matrix[:,i]==max_iou_per_bbox[i]] = 1
+def unmap(data, count, index, fill=-1):
+    if len(data.shape) == 1:
+        ret = np.empty((count,), dtype=data.dtype)
+        ret.fill(fill)
+        ret[index] = data
+    else:
+        ret = np.empty((count,) + data.shape[1:], dtype=data.dtype)
+        ret.fill(fill)
+        ret[index, :] = data
+    return ret
 
-    inds_inside = np.where(
-        (anchors[:, 0] >= -allowed_border) &
-        (anchors[:, 1] >= -allowed_border) &
-        (anchors[:, 2] < img_size[1] + allowed_border) &  # width
-        (anchors[:, 3] < img_size[0] + allowed_border)    # height
-    )[0]
-    inds_outside = set(np.arange(len(anchors))).difference(set(inds_inside))
-    inds_outside = np.array(list(inds_outside))
-    anchor_labels[inds_outside] = -1
-    
-    return anchor_labels, np.argmax(iou_matrix,1)       
 
-def scale_bboxes(bboxes, sx, sy):
-    bboxes_scaled = copy.deepcopy(bboxes)
-    for i, bbox in enumerate(bboxes):
-        bboxes_scaled[i] = [int(bbox[0]*sx), 
-                            int(bbox[1]*sy), 
-                            int(bbox[2]*sx), 
-                            int(bbox[3]*sy)
-                           ]
-        
-    return bboxes_scaled
 
-def get_txtytwth(anchor, bbox):
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
-    x = bbox[0] + 0.5*w
-    y = bbox[1] + 0.5*h
-    
-    w_a = anchor[2] - anchor[0]
-    h_a = anchor[3] - anchor[1]
-    x_a = anchor[0] + 0.5*w_a
-    y_a = anchor[1] + 0.5*h_a
-    
-    tw = np.log(w/w_a)
-    th = np.log(h/h_a)
-    tx = (x-x_a)/w_a
-    ty = (y-y_a)/h_a
-    
-    return tx, ty, tw, th
+def get_xywh(bboxes):
+    w = bboxes[:,2] - bboxes[:,0]
+    h = bboxes[:,3] - bboxes[:,1]
+    x = bboxes[:,0] + 0.5*w
+    y = bboxes[:,1] + 0.5*h      
+    return x, y, w, h
 
-def get_t_parameters(anchors, bboxes, gt_bboxes_id):
-    anchors_final = []
-    for i in range(len(anchors)):
-        anchors_final.append(get_txtytwth(anchors[i], bboxes[gt_bboxes_id[i]]))
-    return np.array(anchors_final, dtype=np.float32)
-"""
-if __name__ == '__main__': 
-    t = time.time()
-    anchors = generate_anchors((600, 600), 16, [8,16,32], [0.5,1,2])
-
-    print(time.time() - t)
+def bbox2reg(bboxes, anchors):
+    x, y, w, h = get_xywh(bboxes)
+    xa, ya, wa, ha = get_xywh(anchors)
+    tw = np.log(w/wa)
+    th = np.log(h/ha)
+    tx = (x-xa)/wa
+    ty = (y-ya)/ha
+    return np.stack((tx, ty, tw, th), axis=1)
     
-    img = np.zeros((600,600))
-    
-    for idx in range(2):
-        start = (int(anchors[idx][0]), int(anchors[idx][1]))
-        end = (int(anchors[idx][2]), int(anchors[idx][3]))
-        img = cv2.rectangle(img, start, end, (255, 255, 255), 1)
-        
-    plt.imshow(img, 'gray')
-"""    
-    
-if __name__ == '__main__':
-    anchor_params = dict(receptive_field=16,
-                     scales = [8,16,32],
-                     ratios = [0.5,1,2]
-                )
-    anchors = generate_anchors([600,600], anchor_params)
-
-    print(anchors)
-    print(anchors.shape)
+   

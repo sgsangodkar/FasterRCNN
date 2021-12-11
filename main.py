@@ -28,14 +28,17 @@ from torch.optim import lr_scheduler
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-
 fe = FeatureExtractor('vgg16').to(device)
-rpn = RPN(512, 512, 9).to(device)
+
+rpn = RPN(in_channels=512, 
+          out_channels=512, 
+          num_proposals=9).to(device)
+
 models_dict = dict(fe=fe, rpn=rpn)
 
 
-fe.load_state_dict(torch.load('checkpoint_fe.pt' ,map_location=torch.device('cpu')))
-rpn.load_state_dict(torch.load('checkpoint_rpn.pt', map_location=torch.device('cpu')))
+#fe.load_state_dict(torch.load('checkpoint_fe.pt' ,map_location=torch.device('cpu')))
+#rpn.load_state_dict(torch.load('checkpoint_rpn.pt', map_location=torch.device('cpu')))
                 
 #dummy_image = torch.zeros((1, 3, 600, 600)).float()
 
@@ -48,21 +51,14 @@ rpn.load_state_dict(torch.load('checkpoint_rpn.pt', map_location=torch.device('c
 data_path = '../voc_data/VOCdevkit/VOC2012'
 data_type = 'trainval'
 
-transform = transforms.Compose([
-                transforms.ToPILImage(),
-                transforms.Resize(600),
-                transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), 
-                                     (0.229, 0.224, 0.225))
-            ])
-                
-gt_parser = ParseGTxmls(data_path, data_type)
-anchor_params = dict(receptive_field=16,
-                     scales = [8,16,32],
-                     ratios = [0.5,1,2]
-                )
-
-dataset = VOCDataset(transform, gt_parser, anchor_params)
+data_configs = dict(
+        data_path='../../voc_data/VOCdevkit/VOC2012',
+        data_type='trainval',
+        min_size=600,
+        random_flips=True
+        )
+dataset = VOCDataset(data_configs)
+   
 lengths = [int(0.8*len(dataset)), int(0.2*len(dataset))]
 trainset, valset = random_split(dataset, lengths)
 
@@ -78,7 +74,10 @@ val_dataloader = DataLoader(valset,
                             shuffle=False, 
                             pin_memory=True
                  )
+
 dataloaders = dict(train = train_dataloader, val = val_dataloader)
+
+             
 
 optimizer = optim.SGD([
                 {'params': models_dict['fe'].fe[10:].parameters()},
@@ -87,6 +86,12 @@ optimizer = optim.SGD([
 
 # Decay LR by a factor of 0.1 every 10 epochs
 scheduler = lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+
+faster_rcnn_configs = dict()
+
+faster_rcnn = FasterRCNN(faster_rcnn_configs)
+trainer = TrainerFasterRCNN(faster_rcnn, train_configs)
+trainer.train()
 
 trained_model = train_model(models_dict, dataloaders, optimizer, scheduler, num_epochs=7)           
  
