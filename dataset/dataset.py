@@ -18,10 +18,10 @@ from dataset.xml_parser import ParseGTxmls
 
 
 class VOCDataset(Dataset):
-    def __init__(self, configs):
+    def __init__(self, data_path, data_type, min_size, random_flips):
         super().__init__()
-        self.gt_parser = ParseGTxmls(configs.data_path, configs.data_type)
-        self.transform = Transformer(configs.min_size, configs.random_flips)
+        self.gt_parser = ParseGTxmls(data_path, data_type)
+        self.transform = Transformer(min_size, random_flips)
            
     def __len__(self):
         return len(self.gt_parser.img_ids)
@@ -31,9 +31,9 @@ class VOCDataset(Dataset):
         img = cv2.imread(gt_data['img_path'])
         bboxes = gt_data['bboxes']
         classes = gt_data['classes']
+        difficult = gt_data['difficult']
         
-        img, bboxes = self.transform(img, bboxes)
-        return img, bboxes, classes
+        return self.transform(img, bboxes, classes, difficult)
                
 class Transformer(object):
     def __init__(self, min_size, random_flips=True):
@@ -46,14 +46,17 @@ class Transformer(object):
                 transforms.Normalize((0.485, 0.456, 0.406), 
                                      (0.229, 0.224, 0.225))
             ])        
-    def __call__(self, img, bboxes):
+                
+    def __call__(self, img, bboxes, classes, difficult):
         ht, wt, _ = img.shape
         img = self.img_transform(img)
         _, ht_new, wt_new = img.shape
         
         sx, sy = wt_new/wt, ht_new/ht
         bboxes = self.scale_bboxes(bboxes, sx, sy)
-        return img, bboxes
+        classes = torch.tensor(classes)
+        difficult = torch.tensor(difficult)
+        return img, bboxes, classes, difficult
  
     def scale_bboxes(self, bboxes, sx, sy):
         bboxes_scaled = np.empty((len(bboxes),4))   
@@ -63,15 +66,13 @@ class Transformer(object):
                                 int(bbox[2]*sx), 
                                 int(bbox[3]*sy)
                                ]
-        return torch.tensor(bboxes_scaled)       
+        return torch.tensor(bboxes_scaled, dtype=torch.float32)       
 
-if __name__ == '__main__':
-    data_configs = dict(
-            data_path='../../voc_data/VOCdevkit/VOC2012',
+if __name__ == '__main__': 
+            
+    dataset = VOCDataset(data_path='../../voc_data/VOCdevkit/VOC2012',
             data_type='trainval',
             min_size=600,
-            random_flips=True
-            )
-    dataset = VOCDataset(data_configs)
+            random_flips=True)
     
-    img, bboxes, classes = dataset[0]
+    img, bboxes, classes, difficult = dataset[0]

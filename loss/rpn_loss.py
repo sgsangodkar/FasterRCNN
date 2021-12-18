@@ -5,43 +5,110 @@ Created on Fri Dec 10 17:31:22 2021
 
 @author: sagar
 """
-import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-class RPNLoss(nn.Module):
-    def __init__(self, num_samples, pos_ratio):
-        super().__init__()
-        self.num_samples = num_samples
-        self.pos_ratio = pos_ratio
-
-    def rpn_cls_loss(self, pred_logits, gt_labels, ids):
-        loss = F.cross_entropy(pred_logits[ids], gt_labels[ids], reduction='sum')
-        return tuple((loss, len(ids)))
+def rpn_cls_loss(cls_op, cls_gt, cls_mask):
+    loss = F.cross_entropy(cls_op[cls_mask], cls_gt[cls_mask])
+    return loss
     
-    def rpn_reg_loss(self, pred_reg, gt_reg, gt_labels, mask):
-        if len(mask)>0:
-            loss = F.smooth_l1_loss(pred_reg[mask], gt_reg[mask], reduction='sum')
-            return tuple((loss, len(mask)))
-        else:
-            return tuple((torch.tensor(0), 0))
+def rpn_reg_loss(reg_op, reg_gt, reg_mask):
+    loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask])
+    return loss
+ 
+def rpn_loss(cls_op, cls_gt, reg_op, reg_gt):
+    pos_indx = torch.where(cls_gt==1)[0]
+    neg_indx = torch.where(cls_gt==0)[0]
+    cls_mask = torch.hstack([pos_indx, neg_indx])
+    reg_mask = pos_indx
+   
+    cls_loss = rpn_cls_loss(cls_op, cls_gt, cls_mask)
+    reg_loss = rpn_reg_loss(reg_op, reg_gt, reg_mask)
+  
+    return cls_loss, reg_loss
+"""
+def rpn_cls_loss(cls_op, cls_gt, cls_mask):
+    loss = F.cross_entropy(cls_op[cls_mask], cls_gt[cls_mask])
+    return loss
+    
+def rpn_reg_loss(reg_op, reg_gt, reg_mask):
+    loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask])
+    return loss
+ 
+def rpn_loss(cls_op, cls_gt, reg_op, reg_gt):
+    num_samples = 256
+    pos_ratio = 0.5
 
-    def forward(self, pred_reg, gt_reg, pred_logits, gt_labels):
-        positives = torch.where(gt_labels==1)[0]
-        negatives = torch.where(gt_labels==0)[0]
-        ids = torch.empty(self.num_samples, dtype=torch.long)
-        num_positives = int(self.num_samples*self.pos_ratio)
+    pos = torch.where(cls_gt==1)[0]
+    neg = torch.where(cls_gt==0)[0]
+    cls_mask = torch.empty(num_samples, dtype=torch.long)
+    req_num_pos = int(num_samples*pos_ratio)
+    
+    if len(pos)<req_num_pos:
+        cls_mask[:len(pos)] = pos
+        req_num_neg = num_samples-len(pos)
+        cls_mask[len(pos):num_samples] = neg[torch.randint(len(neg), (req_num_neg,))] 
+        reg_mask = cls_mask[:len(pos)]
+    else:
+        cls_mask[:req_num_pos] = pos[torch.randint(len(pos), (req_num_pos,))] 
+        req_num_neg = num_samples-req_num_pos
+        cls_mask[req_num_pos:num_samples] = neg[torch.randint(len(neg), (req_num_neg,))] 
+        reg_mask = cls_mask[:req_num_pos]
+
+    cls_loss = rpn_cls_loss(cls_op, cls_gt, cls_mask)
+    reg_loss = rpn_reg_loss(reg_op, reg_gt, reg_mask)
+  
+    return cls_loss, reg_loss
+
+
+class RPNLoss:
+    def __init__(self):
+        self.r_cls_loss = 0
+        self.r_cls_count = 0
         
-        if len(positives)<num_positives:
-            ids[:len(positives)] = positives
-            ids[len(positives):self.num_samples] = negatives[torch.randint(len(negatives), (self.num_samples-len(positives),))] 
-            mask = ids[:len(positives)]
-        else:
-            ids[:num_positives] = positives[torch.randint(len(positives), (num_positives,))] 
-            ids[num_positives:self.num_samples] = negatives[torch.randint(len(negatives), (self.num_samples-num_positives,))] 
-            mask = ids[:num_positives]
+        self.r_reg_loss = 0
+        self.r_reg_count = 0
+        
+        self.num_samples = 256
+        self.pos_ratio = 0.5        
+
+    def rpn_cls_loss(self, cls_op, cls_gt, cls_mask):
+        loss = F.cross_entropy(cls_op[cls_mask], cls_gt[cls_mask])
+        return tuple((loss, len(cls_mask)))
+        
+    def rpn_reg_loss(self, reg_op, reg_gt, reg_mask):
+        loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask], reduction='sum')
+        return tuple((loss, len(reg_mask)))
     
-        cls_loss = self.rpn_cls_loss(pred_logits, gt_labels, ids)
-        reg_loss = self.rpn_reg_loss(pred_reg, gt_reg, gt_labels, mask)
-      
-        return cls_loss, reg_loss
+    def calculate(self, cls_op, cls_gt, reg_op, reg_gt):   
+        pos = torch.where(cls_gt==1)[0]
+        neg = torch.where(cls_gt==0)[0]
+        cls_mask = torch.empty(self.num_samples, dtype=torch.long)
+        req_num_pos = int(self.num_samples*self.pos_ratio)
+        
+        if len(pos)<req_num_pos:
+            cls_mask[:len(pos)] = pos
+            req_num_neg = self.num_samples-len(pos)
+            cls_mask[len(pos):self.num_samples] = neg[torch.randint(len(neg), (req_num_neg,))] 
+            reg_mask = cls_mask[:len(pos)]
+        else:
+            cls_mask[:req_num_pos] = pos[torch.randint(len(pos), (req_num_pos,))] 
+            req_num_neg = self.num_samples-req_num_pos
+            cls_mask[req_num_pos:self.num_samples] = neg[torch.randint(len(neg), (req_num_neg,))] 
+            reg_mask = cls_mask[:req_num_pos]
+    
+        cls_loss, cls_count = rpn_cls_loss(cls_op, cls_gt, cls_mask)
+        reg_loss, reg_count = rpn_reg_loss(reg_op, reg_gt, reg_mask)
+
+        self.r_cls_loss += cls_loss
+        self.r_cls_count += cls_count
+        
+        self.r_reg_loss += reg_loss
+        self.r_reg_count += reg_count
+        
+        loss = cls_loss/cls_count + reg_loss/reg_count
+        return loss 
+    
+    def get_running_losses(self):
+        return self.r_cls_loss/self.r_cls_count, self.r_reg_loss/self.r_reg_count
+"""

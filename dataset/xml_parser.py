@@ -12,6 +12,28 @@ import xml.etree.ElementTree as ET
 
 # https://docs.python.org/3/library/xml.etree.elementtree.html
 
+VOC_CLASSES = (
+    'aeroplane',
+    'bicycle',
+    'bird',
+    'boat',
+    'bottle',
+    'bus',
+    'car',
+    'cat',
+    'chair',
+    'cow',
+    'diningtable',
+    'dog',
+    'horse',
+    'motorbike',
+    'person',
+    'pottedplant',
+    'sheep',
+    'sofa',
+    'train',
+    'tvmonitor')
+
 class ParseGTxmls(object):
     def __init__(self, data_path, data_type):
         super().__init__()
@@ -39,9 +61,10 @@ class ParseGTxmls(object):
             ymin = int(bndbox.find('ymin').text) - 1
             xmax = int(bndbox.find('xmax').text) - 1
             ymax = int(bndbox.find('ymax').text) - 1
-            bboxes.append((xmin,ymin,xmax,ymax))
-            classes.append(obj.find('name').text)
-            difficult.append(obj.find('difficult').text)
+            bboxes.append([xmin,ymin,xmax,ymax])
+            class_name = obj.find('name').text
+            classes.append(VOC_CLASSES.index(class_name))
+            difficult.append(int(obj.find('difficult').text))
             
         return dict(img_path = img_path,
                      classes = classes,

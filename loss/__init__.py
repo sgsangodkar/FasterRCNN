@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 
-from loss.rpn_loss import RPNLoss
+from loss.faster_rcnn_loss import faster_rcnn_loss
