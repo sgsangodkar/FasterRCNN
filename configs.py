@@ -23,7 +23,7 @@ class config:
 
     data_path = '../voc_data/VOCdevkit/VOC2012'
     data_type = 'trainval'
-    min_size = 800
+    min_size = 600
     random_flips = True
     
     visualize = True

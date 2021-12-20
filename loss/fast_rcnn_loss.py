@@ -18,7 +18,7 @@ def fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt):
         cls_gt = cls_gt[mask]
         reg_op = reg_op.view(len(cls_gt), -1, 4)
         reg_op = reg_op[torch.arange(len(cls_gt)), cls_gt-1]
-        loss = F.smooth_l1_loss(reg_op, reg_gt, beta=3)
+        loss = F.smooth_l1_loss(reg_op, reg_gt, beta=1)
         #print("FastRCNN")
         #print(torch.abs((reg_op-reg_gt)).max())
         #print(loss, sum(mask))
