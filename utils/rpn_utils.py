@@ -82,8 +82,6 @@ def target_gen_rpn(anchors, bboxes_gt, img_size):
 def target_gen_rpn(anchors, bboxes_gt, img_size):
     n_samples = 128
     pos_ratio = 0.5
-    num_anchors = anchors.shape[0]  
-    num_bboxes = bboxes_gt.shape[0]
     
     indx_v = torch.where(
                     (anchors[:, 0] >= 0) &
@@ -91,28 +89,32 @@ def target_gen_rpn(anchors, bboxes_gt, img_size):
                     (anchors[:, 2] < img_size[1]) &  # width
                     (anchors[:, 3] < img_size[0])    # height
                     )[0]
-    
+    #print(len(indx_v))
     anchors_v = anchors[indx_v]
-    num_anchors_v = anchors_v.shape[0]
     iou_matrix = obtain_iou_matrix(anchors_v, bboxes_gt)
     
     ## Positive and Negative Anchors Selection
-    cls_gt_v = torch.empty(num_anchors_v, dtype=torch.int64) #long      
-    max_iou_per_anchor = torch.max(iou_matrix, axis=1)[0]
-    min_iou_per_anchor = torch.min(iou_matrix, axis=1)[0]
-    cls_gt_v[max_iou_per_anchor>0.7] = 1
-    cls_gt_v[min_iou_per_anchor<0.3] = 0           
-    max_iou = torch.max(iou_matrix)
-    for i in range(num_bboxes):
-        cls_gt_v[iou_matrix[:,i]==max_iou] = 1
+    cls_gt_v = torch.zeros(len(anchors_v), dtype=torch.int64) #long      
+    argmax_iou_per_anchor = torch.argmax(iou_matrix, axis=1)
+    max_iou_per_anchor = iou_matrix[np.arange(len(anchors_v)), argmax_iou_per_anchor]
+    cls_gt_v[max_iou_per_anchor<0.3] = 0   
+    #cls_gt_v[max_iou_per_anchor>=0.7] = 1
+        
+    argmax_iou_per_gt = torch.argmax(iou_matrix, axis=0)
+    max_iou_per_gt = iou_matrix[argmax_iou_per_gt, np.arange(len(bboxes_gt))]
+    for i in range(len(bboxes_gt)):
+        cls_gt_v[iou_matrix[:,i]==max_iou_per_gt[i]] = 1
+        
+    cls_gt_v[max_iou_per_anchor>=0.7] = 1
+    #print(torch.sum(cls_gt_v), torch.sum(iou_matrix), "Hi")
     ## Anchor Selection End ##
 
     bboxes_v = bboxes_gt[torch.argmax(iou_matrix, axis=1)]        
     reg_gt_v = bbox2reg(anchors_v, bboxes_v)
     #print(anchors_v.shape, bboxes_v.shape, reg_gt_v.shape)
    
-    cls_gt = unmap(cls_gt_v, num_anchors, indx_v, fill=-1)
-    reg_gt = unmap(reg_gt_v, num_anchors, indx_v, fill=-1)
+    cls_gt = unmap(cls_gt_v, len(anchors), indx_v, fill=-1)
+    reg_gt = unmap(reg_gt_v, len(anchors), indx_v, fill=-1)
     
     pos_indx = torch.where(cls_gt==1)[0]
     neg_indx = torch.where(cls_gt==0)[0]
@@ -121,15 +123,21 @@ def target_gen_rpn(anchors, bboxes_gt, img_size):
     n_pos = min(len(pos_indx), n_pos_req)
     n_neg_req = n_samples - n_pos
     n_neg = min(len(neg_indx), n_neg_req)
+    #print(n_pos, n_neg)
 
-    pos_indx = pos_indx[torch.randint(len(pos_indx), (n_pos,))]    
-    neg_indx = neg_indx[torch.randint(len(neg_indx), (n_neg,))] 
+    pos_indx = pos_indx[torch.randperm(len(pos_indx))[:n_pos]]  
+    neg_indx = neg_indx[torch.randperm(len(neg_indx))[:n_neg]] 
     indx_valid = torch.hstack([pos_indx, neg_indx])
-    indx_all = torch.arange(num_anchors)
+    #uniques, counts = indx_valid.unique(return_counts=True)
+    #print(len(indx_valid), len(pos_indx), len(neg_indx), len(uniques), len(counts==1))
+
+    indx_all = torch.arange(len(anchors))
     combined = torch.cat((indx_valid, indx_all))
     uniques, counts = combined.unique(return_counts=True)
     indx_invalid = uniques[counts==1]
     cls_gt[indx_invalid] = -1
+    #print(len(pos_indx), len(neg_indx))
+    #print(torch.sum(cls_gt==1), torch.sum(cls_gt==0))
 ############
         
     return cls_gt, reg_gt

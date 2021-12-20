@@ -13,7 +13,13 @@ def rpn_cls_loss(cls_op, cls_gt, cls_mask):
     return loss
     
 def rpn_reg_loss(reg_op, reg_gt, reg_mask):
-    loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask])
+    loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask], beta=3)
+    #print("RPN")
+    #print(torch.abs((reg_op[reg_mask]-reg_gt[reg_mask])).max())
+    #print(loss, len(reg_mask))
+    #print(reg_op[reg_mask])
+    #print(reg_gt[reg_mask])
+    #print(reg_op[reg_mask].mean(axis=0), reg_gt[reg_mask].mean(axis=0))
     return loss
  
 def rpn_loss(cls_op, cls_gt, reg_op, reg_gt):

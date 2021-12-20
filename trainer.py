@@ -18,12 +18,16 @@ from torchnet.meter import AverageValueMeter
 import torch.optim as optim
 from torch.optim import lr_scheduler
 
+
 class FasterRCNNTrainer(nn.Module):
-    def __init__(self, device, writer=None):
+    def __init__(self, device):
         super().__init__()
         vgg = models.vgg16(pretrained=True, progress=False)
         self.fe = vgg.features[:-1].to(device)   
-        
+        for layer in self.fe[:10]:
+            for p in layer.parameters():
+                p.requires_grad = False
+            
         self.rpn = RPN(config.in_chan,
                        config.out_chan,
                        config.anchors_per_location
@@ -41,10 +45,8 @@ class FasterRCNNTrainer(nn.Module):
                        'fast_rcnn_cls' : AverageValueMeter(),
                        'fast_rcnn_reg' : AverageValueMeter()
                       }
-        self.writer = writer
         self.optimizer = self.get_optimizer()
-        #Per layer learning rate??
-        #VGG conv3_1 and above make learnable
+        #print(self.optimizer)
         
         self.scheduler = lr_scheduler.StepLR(self.optimizer, 
                                              step_size=20000, 
@@ -54,22 +56,35 @@ class FasterRCNNTrainer(nn.Module):
         self.step = 0
 
     def get_optimizer(self):
-       
         lr = config.lr
         params = []
         for key, value in dict(self.named_parameters()).items():
             if value.requires_grad:
-                if 'bias' in key:
-                    params += [{'params': [value], 'lr': lr * 2, 'weight_decay': 0}]
-                else:
-                    params += [{'params': [value], 'lr': lr, 'weight_decay': 0.0005}]
+                if 'fe' in key:
+                    params += [{'params': [value], 'lr': lr/10}]
+                
+                #elif 'fast_rcnn.regressor' in key:
+                #    if 'bias' in key:
+                #        params += [{'params': [value], 'lr': lr*2}]
+                #    else:
+                #        params += [{'params': [value], 'lr': lr}]
+               
+                        
+                #elif 'rpn.regressor' in key:
+                #    if 'bias' in key:
+                #        params += [{'params': [value], 'lr': lr*2}]
+                #    else:
+                #        params += [{'params': [value], 'lr': lr}]  
+                        
+                else:    
+                    params += [{'params': [value], 'lr': lr}]
         
         self.optimizer = optim.SGD(params, 
-                                   momentum=0.9
+                                   momentum=0.9,
+                                   weight_decay=0.0005
                                 )
         return self.optimizer
-    # optimizer can only optimize Tensors, but one of the params 
-    #is Module.parameters     
+ 
     
     def forward(self, img, bboxes_gt, classes_gt):
         #print("inside forward")
@@ -84,14 +99,16 @@ class FasterRCNNTrainer(nn.Module):
                 scales=[8,16,32], 
                 ratios=[0.5,1,2]
             )  
-        
+        #print(anchors[0], bboxes_gt, img_size)
         rpn_cls_gt, rpn_reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
+        #print(rpn_reg_gt.mean(axis=0))
         #print("Target RPN Success")
         
         rpn_cls_op, rpn_reg_op = self.rpn(features)
         #print("RPN Success")
         rpn_cls_op = rpn_cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
         rpn_reg_op = rpn_reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()      
+        #print(rpn_reg_op[:,0:4].mean(axis=0))
 
         rpn_gt = (rpn_cls_gt, rpn_reg_gt)
         rpn_op = (rpn_cls_op, rpn_reg_op)
@@ -110,9 +127,14 @@ class FasterRCNNTrainer(nn.Module):
                                                                         bboxes_gt, 
                                                                         classes_gt
                                                                     )
+        #print(fast_rcnn_reg_gt.mean(axis=0))
+
         #print("Target FastRCNN Success")
-        #print(rois.shape, roi_cls_gt.shape, roi_reg_gt.shape)        
+        #print(rois.shape, fast_rcnn_cls_gt.shape, fast_rcnn_reg_gt.shape)        
         fast_rcnn_cls_op, fast_rcnn_reg_op = self.fast_rcnn(features, rois)
+        #print(fast_rcnn_reg_op[:,0:4].mean(axis=0))
+
+        #print(fast_rcnn_cls_op.shape, fast_rcnn_reg_op.shape)
         #print("Fast RCNN Success")
         
         fast_rcnn_gt = (fast_rcnn_cls_gt, fast_rcnn_reg_gt)
@@ -129,7 +151,6 @@ class FasterRCNNTrainer(nn.Module):
         self.rpn.train()
         self.fast_rcnn.train()
         
-        self.step += 1
         self.optimizer.zero_grad()    
         rpn_gt, rpn_op, fast_rcnn_gt, fast_rcnn_op = self.forward(img, 
                                                                   bboxes_gt, 
@@ -149,24 +170,14 @@ class FasterRCNNTrainer(nn.Module):
                     
         self.optimizer.step()
         self.scheduler.step()   
-        
-        if self.writer is not None:      
-             self.writer.add_scalar('RPN_cls', loss_dict['rpn_cls'], self.step)      
-             self.writer.add_scalar('RPN_reg', loss_dict['rpn_reg'], self.step)      
-             self.writer.add_scalar('FastRCNN_cls', loss_dict['fast_rcnn_cls'], self.step)      
-             self.writer.add_scalar('FastRCNN_reg', loss_dict['fast_rcnn_reg'], self.step)      
-
+ 
     #def val_step(self, img, bboxes_gt, classes_gt):
     """
     TO DO
-    Study difference between and and &
     detach, item usage, separate tensor?
-    using detach for loss dictionary is good?
     
-    weighting of loss components
-    optimiser: conv3_1 and upper learnable
-    target generation FastRCNN: normalisation
     using train val and test sets
+    why rpn reg loss is lower compared to fastrcnn reg loss
     
     eval method
     

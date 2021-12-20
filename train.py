@@ -24,7 +24,7 @@ best_loss = 1e5
 since = time.time()
 writer = SummaryWriter()
  
-trainer = FasterRCNNTrainer(device, writer)
+trainer = FasterRCNNTrainer(device)
 
 
 dataset = VOCDataset(config.data_path, 
@@ -44,17 +44,24 @@ dataloader = DataLoader(dataset,
      
         
 for epoch in range(config.epochs):
+    print(epoch)
     for it, data in enumerate(dataloader):
-        print(it)
         img = data[0].to(device)
         bboxes = data[1].squeeze(0).to(device)
         classes = data[2].squeeze(0).to(device)
         #print(bboxes.shape, img.shape, classes.shape)
     
         trainer.train_step(img, bboxes, classes)
-        
-     
-      
+
+        if config.visualize:
+             writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, it)      
+             writer.add_scalar('RPN_reg', trainer.meters['rpn_reg'].mean, it)      
+             writer.add_scalar('FastRCNN_cls', trainer.meters['fast_rcnn_cls'].mean, it)      
+             writer.add_scalar('FastRCNN_reg', trainer.meters['fast_rcnn_reg'].mean, it)      
+       
+#a = torch.tensor([-0.0075,  0.1660, -0.1233,  0.3146])
+#b = torch.tensor([-0.4346, -0.0029, -0.0311, -0.0042])  
+#F.smooth_l1_loss(a,b)     
     
 """        
 torch.save(faster_rcnn.state_dict(), 'checkpoint.pt')

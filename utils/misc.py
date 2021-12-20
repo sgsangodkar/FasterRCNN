@@ -76,4 +76,19 @@ def reg2bbox(anchors, reg_coor):
     h = torch.pow(np.e, reg_coor[:,3:4])*ha    
     x1,y1,x2,y2 = get_x1y1x2y2(x,y,w,h)
     return torch.hstack((x1, y1, x2, y2))
-   
+
+
+def flip_bboxes(bbox, size):
+    H, W = size
+    bbox = bbox.copy()
+    x_max = W - bbox[:, 1]
+    x_min = W - bbox[:, 3]
+    bbox[:, 1] = x_min
+    bbox[:, 3] = x_max
+    return bbox
+
+
+def flip_img(img):
+    # Makes a copy automatically
+    img = torch.flip(img, dims=[1])
+    return img
