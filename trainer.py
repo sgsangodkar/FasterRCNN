@@ -63,26 +63,27 @@ class FasterRCNNTrainer(nn.Module):
                 if 'fe' in key:
                     params += [{'params': [value], 'lr': lr/10}]
                 
-                #elif 'fast_rcnn.regressor' in key:
-                #    if 'bias' in key:
-                #        params += [{'params': [value], 'lr': lr*2}]
-                #    else:
-                #        params += [{'params': [value], 'lr': lr}]
+                elif 'fast_rcnn.regressor' in key:
+                    if 'bias' in key:
+                        params += [{'params': [value], 'lr': lr*2}]
+                    else:
+                        params += [{'params': [value], 'lr': lr}]
                
                         
-                #elif 'rpn.regressor' in key:
-                #    if 'bias' in key:
-                #        params += [{'params': [value], 'lr': lr*2}]
-                #    else:
-                #        params += [{'params': [value], 'lr': lr}]  
+                elif 'rpn.regressor' in key:
+                    if 'bias' in key:
+                        params += [{'params': [value], 'lr': lr*2}]
+                    else:
+                        params += [{'params': [value], 'lr': lr}]  
                         
                 else:    
                     params += [{'params': [value], 'lr': lr}]
         
-        self.optimizer = optim.SGD(params, 
-                                   momentum=0.9,
-                                   weight_decay=0.0005
-                                )
+        #self.optimizer = optim.SGD(params, 
+        #                           momentum=0.9,
+        #                           weight_decay=0.0005
+        #                        )
+        self.optimizer = optim.Adam(params)
         return self.optimizer
  
     
@@ -90,8 +91,8 @@ class FasterRCNNTrainer(nn.Module):
         #print("inside forward")
         features = self.fe(img)
 
-        _,_,W,H = img.shape
-        img_size = (W,H)
+        _,_,H,W = img.shape
+        img_size = (H,W)
         
         anchors = gen_anchors(
                 img_size, 
@@ -107,8 +108,9 @@ class FasterRCNNTrainer(nn.Module):
         rpn_cls_op, rpn_reg_op = self.rpn(features)
         #print("RPN Success")
         rpn_cls_op = rpn_cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
-        rpn_reg_op = rpn_reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()      
-        #print(rpn_reg_op[:,0:4].mean(axis=0))
+        rpn_reg_op = rpn_reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()  
+        #print(rpn_reg_gt.shape, rpn_reg_op.shape, rpn_reg_op.view(-1,4).shape)
+        #print(rpn_reg_op.mean(axis=0))
 
         rpn_gt = (rpn_cls_gt, rpn_reg_gt)
         rpn_op = (rpn_cls_op, rpn_reg_op)

@@ -59,7 +59,7 @@ class Transformer(object):
         return img, bboxes, classes, difficult
  
     def scale_bboxes(self, bboxes, sx, sy):
-        bboxes_scaled = np.empty((len(bboxes),4))   
+        bboxes_scaled = np.zeros((len(bboxes),4))   
         for i, bbox in enumerate(bboxes):
             bboxes_scaled[i] = [int(bbox[0]*sx), 
                                 int(bbox[1]*sy), 

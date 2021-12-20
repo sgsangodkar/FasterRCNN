@@ -168,10 +168,10 @@ def gen_rois(cls_op, reg_op, anchors, img_size):
     fg_scores = cls_op[:,1]
     bboxes_op = reg2bbox(anchors, reg_op)
     
-    torch.clip(bboxes_op[:,0], 0, img_size[0]-1)
-    torch.clip(bboxes_op[:,1], 0, img_size[1]-1)
-    torch.clip(bboxes_op[:,2], 0, img_size[0]-1)
-    torch.clip(bboxes_op[:,3], 0, img_size[1]-1)
+    torch.clip(bboxes_op[:,0], 0, img_size[1]-1)
+    torch.clip(bboxes_op[:,1], 0, img_size[0]-1)
+    torch.clip(bboxes_op[:,2], 0, img_size[1]-1)
+    torch.clip(bboxes_op[:,3], 0, img_size[0]-1)
     indices = nms(bboxes_op, fg_scores, nms_thresh)
     rois = bboxes_op[indices[:top_n]]
     

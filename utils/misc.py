@@ -31,11 +31,11 @@ def obtain_iou_matrix(bboxes1, bboxes2):
 
 def unmap(data, count, index, fill=-1):
     if len(data.shape) == 1:
-        ret = torch.empty((count,), dtype=data.dtype)
+        ret = torch.zeros((count,), dtype=data.dtype)
         ret.fill_(fill)
         ret[index] = data
     else:
-        ret = torch.empty((count,) + data.shape[1:], dtype=data.dtype)
+        ret = torch.zeros((count,) + data.shape[1:], dtype=data.dtype)
         ret.fill_(fill)
         ret[index, :] = data
     return ret
