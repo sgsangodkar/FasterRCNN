@@ -50,13 +50,16 @@ class FastRCNN(nn.Module):
     def init_layers(self):
         self.classifier.weight.data.normal_(0, 0.01)
         self.classifier.bias.data.zero_()
-        self.regressor.weight.data.normal_(0, 0.01)
+        self.regressor.weight.data.normal_(0, 0.001)
         self.regressor.bias.data.zero_()
 
         
     def forward(self, features, rois):
         pool = self.roi(features, [rois])
+        #print(len(rois))
+        #print(pool.shape)
         pool = pool.view(pool.size(0), -1)
+        #print(pool.shape)
         x = self.fc_layers(pool)
         cls_op = self.classifier(x)
         reg_op = self.regressor(x)

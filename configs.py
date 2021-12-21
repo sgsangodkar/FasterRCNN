@@ -27,3 +27,4 @@ class config:
     random_flips = True
     
     visualize = True
+    log = True

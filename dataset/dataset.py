@@ -15,7 +15,11 @@ from torchvision import transforms
 from torch.utils.data import Dataset
 
 from dataset.xml_parser import ParseGTxmls
+from configs import config
 
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
 
 class VOCDataset(Dataset):
     def __init__(self, data_path, data_type, min_size, random_flips):
@@ -54,8 +58,27 @@ class Transformer(object):
         
         sx, sy = wt_new/wt, ht_new/ht
         bboxes = self.scale_bboxes(bboxes, sx, sy)
+
         classes = torch.tensor(classes)
         difficult = torch.tensor(difficult)
+
+        if False:
+            img = img.squeeze().permute(1,2,0).cpu()
+            img_np = np.ascontiguousarray(img)
+            means = np.array((0.485, 0.456, 0.406))
+            stds = np.array((0.229, 0.224, 0.225))
+            img_np = (img_np*stds)+means
+            img_np = np.clip(img_np, 0,1)
+            img_np = (img_np*255).astype(np.uint8)
+            
+            
+            for i in range(len(bboxes)):
+                x1,y1,x2,y2 = np.array(bboxes[i], dtype=np.int16)
+                img_np = cv2.rectangle(img_np, (x1,y1), (x2,y2), (255,0,0), 3)
+                
+            plt.imshow(img_np) 
+            plt.show()
+            
         return img, bboxes, classes, difficult
  
     def scale_bboxes(self, bboxes, sx, sy):

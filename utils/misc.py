@@ -68,10 +68,13 @@ def get_x1y1x2y2(x,y,w,h):
     return x1,y1,x2,y2
 
 def reg2bbox(anchors, reg_coor):
+    #print("in reg2bbox")
+    #print(reg_coor[0:4])
     x1a,y1a,x2a,y2a = torch.split(anchors,1,dim=1)
     xa, ya, wa, ha = get_xywh(x1a,y1a,x2a,y2a)
     x = reg_coor[:,0:1]*wa + xa
     y = reg_coor[:,1:2]*ha + ya
+    #print(reg_coor[0:4,1:2],ha[0:4],ya[0:4],y[0:4])
     w = torch.pow(np.e, reg_coor[:,2:3])*wa
     h = torch.pow(np.e, reg_coor[:,3:4])*ha    
     x1,y1,x2,y2 = get_x1y1x2y2(x,y,w,h)
@@ -92,3 +95,27 @@ def flip_img(img):
     # Makes a copy automatically
     img = torch.flip(img, dims=[1])
     return img
+
+import cv2
+def visualize_bboxes(img, bboxes):
+    img = img.squeeze().permute(1,2,0).cpu()
+    img_np = np.ascontiguousarray(img)
+    means = np.array((0.485, 0.456, 0.406))
+    stds = np.array((0.229, 0.224, 0.225))
+    img_np = (img_np*stds)+means
+    img_np = np.clip(img_np, 0,1)
+    img_np = (img_np*255).astype(np.uint8)
+    
+    #print(rpn_reg_gt[rpn_cls_gt==1])
+    #print(img_np.shape)
+
+    #print(anchors.dtype, rpn_reg_gt.dtype, rpn_bboxes.dtype, "Here2")
+    #print(len(rpn_bboxes))
+    for i in range(len(bboxes)):
+        x1,y1,x2,y2 = np.array(bboxes[i], dtype=np.uint16)
+        #print(x1,y1,x2,y2,"RPN", rpn_bboxes[i], rpn_reg_gt[rpn_cls_gt==1][i])
+        img_np = cv2.rectangle(img_np, (x1,y1), (x2,y2), (0,255,0), 3)
+        
+    #print(len(bboxes_gt))
+    
+    return img_np.copy()

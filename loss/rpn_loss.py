@@ -9,11 +9,13 @@ import torch
 import torch.nn.functional as F
 
 def rpn_cls_loss(cls_op, cls_gt, cls_mask):
+    #print(torch.argmax(cls_op[cls_mask], axis=1), cls_gt[cls_mask])
     loss = F.cross_entropy(cls_op[cls_mask], cls_gt[cls_mask])
     return loss
     
 def rpn_reg_loss(reg_op, reg_gt, reg_mask):
-    loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask], beta=1)
+    loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask])
+    #print(reg_op[reg_mask], reg_gt[reg_mask])
     #print("RPN")
     #print(torch.abs((reg_op[reg_mask]-reg_gt[reg_mask])).max())
     #print(loss, len(reg_mask))

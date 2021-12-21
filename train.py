@@ -42,22 +42,23 @@ dataloader = DataLoader(dataset,
 
 
      
-        
+log_step=0   
 for epoch in range(config.epochs):
-    print(epoch)
-    for it, data in enumerate(dataloader):
+    print(epoch+1)
+    for it, data in enumerate(1, dataloader):
         img = data[0].to(device)
         bboxes = data[1].squeeze(0).to(device)
         classes = data[2].squeeze(0).to(device)
         #print(bboxes.shape, img.shape, classes.shape)
     
-        trainer.train_step(img, bboxes, classes)
-
-        if config.visualize:
-             writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, it)      
-             writer.add_scalar('RPN_reg', trainer.meters['rpn_reg'].mean, it)      
-             writer.add_scalar('FastRCNN_cls', trainer.meters['fast_rcnn_cls'].mean, it)      
-             writer.add_scalar('FastRCNN_reg', trainer.meters['fast_rcnn_reg'].mean, it)      
+        trainer.train_step(img, bboxes, classes, it)
+        
+        if config.log and (it%100)==0:
+             writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, log_step)      
+             writer.add_scalar('RPN_reg', trainer.meters['rpn_reg'].mean, log_step)      
+             writer.add_scalar('FastRCNN_cls', trainer.meters['fast_rcnn_cls'].mean, log_step)      
+             writer.add_scalar('FastRCNN_reg', trainer.meters['fast_rcnn_reg'].mean, log_step)      
+             log_step+=1
        
 #a = torch.tensor([-0.0075,  0.1660, -0.1233,  0.3146])
 #b = torch.tensor([-0.4346, -0.0029, -0.0311, -0.0042])  
