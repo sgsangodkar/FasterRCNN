@@ -14,7 +14,7 @@ from model import RPN, FastRCNN
 from utils import gen_anchors, target_gen_rpn, gen_rois, target_gen_fast_rcnn
 from utils import reg2bbox, visualize_bboxes
 from configs import config
-from loss import faster_rcnn_loss
+from loss import faster_rcnn_loss, get_rpn_loss
 from torchnet.meter import AverageValueMeter
 import torch.optim as optim
 from torch.optim import lr_scheduler
@@ -156,12 +156,13 @@ class FasterRCNNTrainer(nn.Module):
 
         #print(rpn_cls_loss, rpn_reg_loss)
         #print(rpn_cls_gt.shape, rpn_reg_gt.shape)
+        """
         rois = gen_rois(rpn_cls_op.detach(), 
                         rpn_reg_op.detach(), 
                         anchors, 
                         img_size
                     )
-
+        """
 
         #if False:
         #    #print(torch.sum(fast_rcnn_cls_gt==0), torch.sum(fast_rcnn_cls_gt>0))
@@ -176,11 +177,12 @@ class FasterRCNNTrainer(nn.Module):
         #    plt.imshow(img_np) 
         #    plt.title("FastRCNN GT Boxes")
         #    plt.show()
-            
+        """    
         rois, fast_rcnn_cls_gt, fast_rcnn_reg_gt = target_gen_fast_rcnn(rois, 
                                                                         bboxes_gt, 
                                                                         classes_gt
                                                                     )
+        """
         #print(fast_rcnn_reg_gt.mean(axis=0))
         #print(rois.shape, "in trainer")
 
@@ -201,14 +203,14 @@ class FasterRCNNTrainer(nn.Module):
             
         #print("Target FastRCNN Success")
         #print(rois.shape, fast_rcnn_cls_gt.shape, fast_rcnn_reg_gt.shape)  
-        if len(rois):
-            fast_rcnn_cls_op, fast_rcnn_reg_op = self.fast_rcnn(features, rois)
-        else:
-            print("here")
-            fast_rcnn_cls_op = torch.zeros((1, config.num_classes+1))
-            fast_rcnn_reg_op = torch.zeros((1, config.num_classes*4))
-            fast_rcnn_cls_gt  = torch.zeros(1, dtype=torch.long)
-            fast_rcnn_reg_gt = torch.zeros((1, 4))
+        #if len(rois):
+        fast_rcnn_cls_op, fast_rcnn_reg_op = self.fast_rcnn(features, rois)
+        #else:
+        #    print("here")
+        #    fast_rcnn_cls_op = torch.zeros((1, config.num_classes+1))
+        #    fast_rcnn_reg_op = torch.zeros((1, config.num_classes*4))
+        #    fast_rcnn_cls_gt  = torch.zeros(1, dtype=torch.long)
+        #    fast_rcnn_reg_gt = torch.zeros((1, 4))
         #print(fast_rcnn_reg_op[:,0:4].mean(axis=0))
 
         
@@ -248,18 +250,79 @@ class FasterRCNNTrainer(nn.Module):
         
         return rpn_gt, rpn_op, fast_rcnn_gt, fast_rcnn_op
     
+    def rpn_train_step(self, features_l, img_size_l, bboxes_gt_l):
+        rois_l = []
+        rpn_loss = 0
+        self.rpn.train()
+
+        for features, img_size, bboxes_gt in zip(features_l, img_size_l, bboxes_gt_l):
+            anchors = gen_anchors(
+                    img_size, 
+                    receptive_field=16, 
+                    scales=[4,8,16], 
+                    ratios=[0.5,1,2]
+                )   
+            cls_gt, reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
         
-    def train_step(self, img, bboxes_gt, classes_gt, step):
+            cls_op, reg_op = self.rpn(features)
+            cls_op = cls_op.permute(0,2,3,1).view(1,-1,2).squeeze().contiguous()
+            reg_op = reg_op.permute(0,2,3,1).view(1,-1,4).squeeze().contiguous()
+            
+            cls_loss, reg_loss = get_rpn_loss(cls_op, 
+                                              cls_gt, 
+                                              reg_op, 
+                                              reg_gt
+                                          )
+            
+            rpn_loss += cls_loss + 10*reg_loss 
+            rpn_loss.backward(retain_graph=True)
+
+            self.meters['rpn_cls'].add(cls_loss.item())
+            self.meters['rpn_reg'].add(reg_loss.item())
+            
+            rois = gen_rois(cls_op.detach(), 
+                            reg_op.detach(), 
+                            anchors, 
+                            img_size
+                        )
+            rois_l.append(rois)
+            
+        return rois_l  
+
+    def fast_rcnn_train_step(self, features_l, rois_l, bboxes_gt_l, classes_gt_l):
+        self.fast_rcnn.train()
+        cls_ops, reg_ops
+        for data in zip(features_l, rois_l, bboxes_gt_l, classes_gt_l):
+            features = data[0]
+            rois = data[1]
+            bboxes_gt = data[2]
+            classes_gt = data[3]
+            
+            rois, cls_gt, reg_gt = target_gen_fast_rcnn(rois, 
+                                                        bboxes_gt, 
+                                                        classes_gt
+                                                    )    
+        
+            cls_op, reg_op = self.fast_rcnn(features, rois)
+            cls_op = torch.stack(cls_op.stack()
+        
+    def train_step(self, img_l, bboxes_gt_l, classes_gt_l, step):
         #print("inside train step")
         self.fe.train()
-        self.rpn.train()
-        self.fast_rcnn.train()
+        features_l = []
+        img_size_l = []
+        for img in img_l:
+            features_l.append(self.fe(img))
+            _,_,H,W = img.shape
+            img_size_l.append((H,W))
+
+        self.optimizer.zero_grad()                
+        rois_l = self.rpn_train_step(features_l, img_size_l, bboxes_gt_l)
+        self.fast_rcnn_train_step(features_l, rois_l, bboxes_gt_l, classes_gt_l)
+            
         
-        self.optimizer.zero_grad()    
-        rpn_gt, rpn_op, fast_rcnn_gt, fast_rcnn_op = self.forward(img, 
-                                                                  bboxes_gt, 
-                                                                  classes_gt
-                                                              )   
+        
+
         #print("Computing Loss")
         total_loss, loss_dict = faster_rcnn_loss(rpn_gt, 
                                                  rpn_op, 

@@ -8,12 +8,12 @@ Created on Fri Dec 10 17:31:22 2021
 import torch
 import torch.nn.functional as F
 
-def rpn_cls_loss(cls_op, cls_gt, cls_mask):
+def get_rpn_cls_loss(cls_op, cls_gt, cls_mask):
     #print(torch.argmax(cls_op[cls_mask], axis=1), cls_gt[cls_mask])
     loss = F.cross_entropy(cls_op[cls_mask], cls_gt[cls_mask])
     return loss
     
-def rpn_reg_loss(reg_op, reg_gt, reg_mask):
+def get_rpn_reg_loss(reg_op, reg_gt, reg_mask):
     loss = F.smooth_l1_loss(reg_op[reg_mask], reg_gt[reg_mask])
     #print(reg_op[reg_mask], reg_gt[reg_mask])
     #print("RPN")
@@ -24,14 +24,14 @@ def rpn_reg_loss(reg_op, reg_gt, reg_mask):
     #print(reg_op[reg_mask].mean(axis=0), reg_gt[reg_mask].mean(axis=0))
     return loss
  
-def rpn_loss(cls_op, cls_gt, reg_op, reg_gt):
+def get_rpn_loss(cls_op, cls_gt, reg_op, reg_gt):
     pos_indx = torch.where(cls_gt==1)[0]
     neg_indx = torch.where(cls_gt==0)[0]
     cls_mask = torch.hstack([pos_indx, neg_indx])
     reg_mask = pos_indx
    
-    cls_loss = rpn_cls_loss(cls_op, cls_gt, cls_mask)
-    reg_loss = rpn_reg_loss(reg_op, reg_gt, reg_mask)
+    cls_loss = get_rpn_cls_loss(cls_op, cls_gt, cls_mask)
+    reg_loss = get_rpn_reg_loss(reg_op, reg_gt, reg_mask)
   
     return cls_loss, reg_loss
 """

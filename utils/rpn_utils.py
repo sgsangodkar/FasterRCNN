@@ -139,22 +139,18 @@ def target_gen_rpn(anchors, bboxes_gt, img_size):
     #uniques, counts = indx_valid.unique(return_counts=True)
     #print(len(indx_valid), len(pos_indx), len(neg_indx), len(uniques), len(counts==1))
 
-    """
-    TODO
-    Following can be optimised using torch.zeros() for cls_gt
-    """
-    indx_all = torch.arange(len(anchors))
-    combined = torch.cat((indx_valid, indx_all))
-    uniques, counts = combined.unique(return_counts=True)
-    indx_invalid = uniques[counts==1]
-    cls_gt[indx_invalid] = -1
+    
+    #TODO
+    #Following can be optimised using torch.zeros() for cls_gt
+    cls_gt_final = torch.zeros(cls_gt.shape)-1
+    cls_gt_final[indx_valid] = cls_gt[indx_valid]
     #print(len(pos_indx), len(neg_indx))
     #print(torch.sum(cls_gt==1), torch.sum(cls_gt==0))
     
 
 ############
     
-    return cls_gt, reg_gt
+    return cls_gt_final, reg_gt
         
 """
 def assign_labels_bboxes(anchors, bboxes_gt):  
