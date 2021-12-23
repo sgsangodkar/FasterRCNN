@@ -201,14 +201,14 @@ class FasterRCNNTrainer(nn.Module):
             
         #print("Target FastRCNN Success")
         #print(rois.shape, fast_rcnn_cls_gt.shape, fast_rcnn_reg_gt.shape)  
-        if len(rois):
-            fast_rcnn_cls_op, fast_rcnn_reg_op = self.fast_rcnn(features, rois)
-        else:
-            print("here")
-            fast_rcnn_cls_op = torch.zeros((1, config.num_classes+1))
-            fast_rcnn_reg_op = torch.zeros((1, config.num_classes*4))
-            fast_rcnn_cls_gt  = torch.zeros(1, dtype=torch.long)
-            fast_rcnn_reg_gt = torch.zeros((1, 4))
+        #if len(rois):
+        fast_rcnn_cls_op, fast_rcnn_reg_op = self.fast_rcnn(features, rois)
+        #else:
+        #    print("here")
+        #    fast_rcnn_cls_op = torch.zeros((1, config.num_classes+1))
+        #    fast_rcnn_reg_op = torch.zeros((1, config.num_classes*4))
+        #    fast_rcnn_cls_gt  = torch.zeros(1, dtype=torch.long)
+        #    fast_rcnn_reg_gt = torch.zeros((1, 4))
         #print(fast_rcnn_reg_op[:,0:4].mean(axis=0))
 
         
@@ -249,7 +249,7 @@ class FasterRCNNTrainer(nn.Module):
         return rpn_gt, rpn_op, fast_rcnn_gt, fast_rcnn_op
     
         
-    def train_step(self, img, bboxes_gt, classes_gt, step):
+    def train_step(self, img, bboxes_gt, classes_gt):
         #print("inside train step")
         self.fe.train()
         self.rpn.train()

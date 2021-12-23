@@ -26,11 +26,11 @@ def faster_rcnn_loss(rpn_gt, rpn_op, fast_rcnn_gt, fast_rcnn_op):
                                     )
     #print(fast_rcnn_cls_loss, fast_rcnn_reg_loss)
     
-    total_loss = rpn_cls_loss + rpn_reg_loss + fast_rcnn_cls_loss + fast_rcnn_reg_loss
+    total_loss = rpn_cls_loss + 10*rpn_reg_loss + fast_rcnn_cls_loss + 10*fast_rcnn_reg_loss
                  
     loss_dict = {'rpn_cls': rpn_cls_loss,
-                 'rpn_reg': rpn_reg_loss,
+                 'rpn_reg': 10*rpn_reg_loss,
                  'fast_rcnn_cls' : fast_rcnn_cls_loss,
-                 'fast_rcnn_reg' : fast_rcnn_reg_loss
+                 'fast_rcnn_reg' : 10*fast_rcnn_reg_loss
              }
     return total_loss, loss_dict

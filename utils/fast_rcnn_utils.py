@@ -4,7 +4,7 @@ import torch
 from utils.misc import bbox2reg, obtain_iou_matrix, get_xywh
 
 def target_gen_fast_rcnn(rois, bboxes_gt, classes_gt):
-    n_samples = 128
+    n_samples = 64
     pos_ratio = 0.5
     iou_max = 0.5
     iou_min = 0.1
