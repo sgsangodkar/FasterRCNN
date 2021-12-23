@@ -4,11 +4,11 @@ import torch
 import torch.nn.functional as F
 
 
-def fast_rcnn_cls_loss(cls_op, cls_gt):
+def get_fast_rcnn_cls_loss(cls_op, cls_gt):
     loss = F.cross_entropy(cls_op, cls_gt)
     return loss
     
-def fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt):
+def get_fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt):
     #cls_op = torch.argmax(cls_op, dim=1)
     #print(cls_gt)
     mask = cls_gt>0
@@ -32,9 +32,9 @@ def fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt):
     #print(reg_gt)
     return loss
  
-def fast_rcnn_loss(cls_op, cls_gt, reg_op, reg_gt): 
+def get_fast_rcnn_loss(cls_op, cls_gt, reg_op, reg_gt): 
     #print(cls_op.shape, cls_gt.shape, reg_op.shape, reg_gt.shape)
-    cls_loss = fast_rcnn_cls_loss(cls_op, cls_gt)
-    reg_loss = fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt)
+    cls_loss = get_fast_rcnn_cls_loss(cls_op, cls_gt)
+    reg_loss = get_fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt)
   
     return cls_loss, reg_loss

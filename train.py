@@ -34,9 +34,23 @@ dataset = VOCDataset(config.data_path,
                  )
    
 
+def custom_collate(batch):
+    imgs = []
+    gt_bboxes = []
+    gt_classes = []
+    gt_difficults = []
+    for img, bboxes, classes, difficult in batch:
+        imgs.append(img)
+        gt_bboxes.append(bboxes)
+        gt_classes.append(classes)
+        gt_difficults.append(difficult)
+    
+    return [imgs, gt_bboxes, gt_classes, gt_difficults]
+  
 dataloader = DataLoader(dataset, 
-                        batch_size=1, 
+                        batch_size=config.batch_size, 
                         shuffle=True, 
+                        collate_fn = custom_collate,
                         pin_memory=True
                    )
 
@@ -45,15 +59,16 @@ dataloader = DataLoader(dataset,
 log_step=0   
 for epoch in range(config.epochs):
     print(epoch+1)
-    for it, data in enumerate(1, dataloader):
-        img = data[0].to(device)
-        bboxes = data[1].squeeze(0).to(device)
-        classes = data[2].squeeze(0).to(device)
+    for data in dataloader:
+        img = data[0]
+        bboxes = data[1]
+        classes = data[2]
         #print(bboxes.shape, img.shape, classes.shape)
     
-        trainer.train_step(img, bboxes, classes, it)
-        
-        if config.log and (it%100)==0:
+        trainer.train_step(img, bboxes, classes)
+        #trainer.val_step(img, bboxes, classes)
+
+        if config.log:
              writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, log_step)      
              writer.add_scalar('RPN_reg', trainer.meters['rpn_reg'].mean, log_step)      
              writer.add_scalar('FastRCNN_cls', trainer.meters['fast_rcnn_cls'].mean, log_step)      
@@ -64,9 +79,9 @@ for epoch in range(config.epochs):
 #b = torch.tensor([-0.4346, -0.0029, -0.0311, -0.0042])  
 #F.smooth_l1_loss(a,b)     
     
-"""        
-torch.save(faster_rcnn.state_dict(), 'checkpoint.pt')
-
+        
+torch.save(trainer.state_dict(), 'checkpoint.pt')
+"""
 time_elapsed = time.time() - since
 print('Training complete in {:.0f}m {:.0f}s'.format(
     time_elapsed // 60, time_elapsed % 60))

@@ -17,14 +17,11 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.ops import RoIPool
 
 class FastRCNN(nn.Module):
     def __init__(self, 
                  vgg_classifier, 
-                 num_classes, 
-                 roi_pool_size, 
-                 receptive_field
+                 num_classes
              ):
         super().__init__()
         self.fc_layers = vgg_classifier[:-1]
@@ -33,9 +30,9 @@ class FastRCNN(nn.Module):
 
         self.num_classes = num_classes
         
-        self.output_size = (roi_pool_size, roi_pool_size)
-        self.spatial_scale = 1/receptive_field
-        self.roi = RoIPool(self.output_size, self.spatial_scale)
+        #self.output_size = (roi_pool_size, roi_pool_size)
+        #self.spatial_scale = 1/receptive_field
+        #self.roi = RoIPool(self.output_size, self.spatial_scale)
         """
         RoIPool
             def __init__(output_size, spatial_scale):
@@ -54,13 +51,13 @@ class FastRCNN(nn.Module):
         self.regressor.bias.data.zero_()
 
         
-    def forward(self, features, rois):
-        pool = self.roi(features, [rois])
+    def forward(self, features):
+        #pool = self.roi(features, [rois])
         #print(len(rois))
         #print(pool.shape)
-        pool = pool.view(pool.size(0), -1)
+        #pool = pool.view(pool.size(0), -1)
         #print(pool.shape)
-        x = self.fc_layers(pool)
+        x = self.fc_layers(features)
         cls_op = self.classifier(x)
         reg_op = self.regressor(x)
         

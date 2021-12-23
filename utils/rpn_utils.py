@@ -140,9 +140,8 @@ def target_gen_rpn(anchors, bboxes_gt, img_size):
     #print(len(indx_valid), len(pos_indx), len(neg_indx), len(uniques), len(counts==1))
 
     
-    #TODO
     #Following can be optimised using torch.zeros() for cls_gt
-    cls_gt_final = torch.zeros(cls_gt.shape)-1
+    cls_gt_final = torch.zeros(cls_gt.shape, dtype=torch.long)-1
     cls_gt_final[indx_valid] = cls_gt[indx_valid]
     #print(len(pos_indx), len(neg_indx))
     #print(torch.sum(cls_gt==1), torch.sum(cls_gt==0))
@@ -179,10 +178,10 @@ def gen_rois(cls_op, reg_op, anchors, img_size):
     bboxes_op = reg2bbox(anchors, reg_op)
     #print(reg_op.dtype, anchors.dtype, bboxes_op.dtype)
     
-    torch.clip(bboxes_op[:,0], 0, img_size[1]-16)
-    torch.clip(bboxes_op[:,1], 0, img_size[0]-16)
-    torch.clip(bboxes_op[:,2], 16, img_size[1]-1)
-    torch.clip(bboxes_op[:,3], 16, img_size[0]-1)
+    torch.clip(bboxes_op[:,0], 0, img_size[1]-1)
+    torch.clip(bboxes_op[:,1], 0, img_size[0]-1)
+    torch.clip(bboxes_op[:,2], 0, img_size[1]-1)
+    torch.clip(bboxes_op[:,3], 0, img_size[0]-1)
     #print(bboxes_op.shape, bboxes_op.dtype)
     #print(fg_scores.shape, fg_scores.dtype)
     

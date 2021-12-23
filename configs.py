@@ -25,6 +25,7 @@ class config:
     data_type = 'trainval'
     min_size = 600
     random_flips = True
+    batch_size = 4
     
     visualize = True
     log = True
