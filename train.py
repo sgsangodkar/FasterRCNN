@@ -63,7 +63,6 @@ for epoch in range(config.epochs):
         img = data[0]
         bboxes = data[1]
         classes = data[2]
-        #print(bboxes.shape, img.shape, classes.shape)
     
         trainer.train_step(img, bboxes, classes)
         #trainer.val_step(img, bboxes, classes)
@@ -75,14 +74,7 @@ for epoch in range(config.epochs):
              writer.add_scalar('FastRCNN_reg', trainer.meters['fast_rcnn_reg'].mean, log_step)      
              log_step+=1
        
-#a = torch.tensor([-0.0075,  0.1660, -0.1233,  0.3146])
-#b = torch.tensor([-0.4346, -0.0029, -0.0311, -0.0042])  
-#F.smooth_l1_loss(a,b)     
-    
-        
-torch.save(trainer.state_dict(), 'checkpoint.pt')
-"""
-time_elapsed = time.time() - since
-print('Training complete in {:.0f}m {:.0f}s'.format(
-    time_elapsed // 60, time_elapsed % 60))
-"""  
+
+    filename = str(epoch+1)+'_checkpoint.pt'    
+    torch.save(trainer.state_dict(), filename)
+
