@@ -10,14 +10,14 @@ def target_gen_fast_rcnn(rois, bboxes_gt, classes_gt):
     n_samples = int(128/config.batch_size)
     pos_ratio = 0.5
     iou_max = 0.5
-    iou_min = 0.1
+    iou_min = 0.0
         
     iou_matrix = obtain_iou_matrix(rois, bboxes_gt)      
     max_ious, gt_id = torch.max(iou_matrix, axis=1)
     #print(max_ious.max())
     #print(torch,max(max_ious), torch.min(max_ious))
     pos_indx = torch.where(max_ious>=iou_max)[0]   
-    neg_indx = torch.where((max_ious<iou_max)&(max_ious>iou_min))[0]  
+    neg_indx = torch.where((max_ious<iou_max)&(max_ious>=iou_min))[0]  
     
     #print(pos_indx.shape, neg_indx.shape)
     
@@ -25,6 +25,7 @@ def target_gen_fast_rcnn(rois, bboxes_gt, classes_gt):
     n_pos = min(len(pos_indx), n_pos_req)
     n_neg_req = n_samples - n_pos
     n_neg = min(len(neg_indx), n_neg_req)
+    #print(len(pos_indx), len(neg_indx))
     #print(n_pos, n_neg)
     
     if len(pos_indx)>0:

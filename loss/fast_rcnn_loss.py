@@ -33,6 +33,7 @@ def get_fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt):
     return loss
  
 def get_fast_rcnn_loss(cls_op, cls_gt, reg_op, reg_gt): 
+    #print(cls_op, cls_gt, reg_op, reg_gt)
     #print(cls_op.shape, cls_gt.shape, reg_op.shape, reg_gt.shape)
     cls_loss = get_fast_rcnn_cls_loss(cls_op, cls_gt)
     reg_loss = get_fast_rcnn_reg_loss(reg_op, reg_gt, cls_gt)

@@ -58,14 +58,16 @@ dataloader = DataLoader(dataset,
      
 log_step=0   
 for epoch in range(config.epochs):
-    print(epoch+1)
+    print("Epoch: {}".format(epoch+1))
     for data in dataloader:
         img = data[0]
         bboxes = data[1]
         classes = data[2]
-    
+        #print(log_step)
+        #since=time.time()
         trainer.train_step(img, bboxes, classes)
         #trainer.val_step(img, bboxes, classes)
+        #print(time.time()-since)
 
         if config.log:
              writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, log_step)      

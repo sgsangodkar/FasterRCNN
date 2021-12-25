@@ -21,11 +21,11 @@ class config:
     lr=0.001
     
 
-    data_path = '../voc_data/VOCdevkit/VOC2012'
+    data_path = '../VOCdevkit/VOC2007/'
     data_type = 'trainval'
     min_size = 600
     random_flips = True
-    batch_size = 4
+    batch_size = 2
     
     visualize = True
     log = True

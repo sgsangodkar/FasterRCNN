@@ -8,6 +8,61 @@ Created on Sun Dec 12 05:44:51 2021
 import torch
 import time
 
+##################################
+import numpy as np
+import six
+import time
+def generate_anchor_base(base_size=16, ratios=[0.5, 1, 2],
+                         anchor_scales=[8, 16, 32]):
+    py = base_size / 2.
+    px = base_size / 2.
+
+    anchor_base = np.zeros((len(ratios) * len(anchor_scales), 4),
+                           dtype=np.float32)
+    for i in six.moves.range(len(ratios)):
+        for j in six.moves.range(len(anchor_scales)):
+            h = base_size * anchor_scales[j] * np.sqrt(ratios[i])
+            w = base_size * anchor_scales[j] * np.sqrt(1. / ratios[i])
+
+            index = i * len(anchor_scales) + j
+            anchor_base[index, 0] = py - h / 2.
+            anchor_base[index, 1] = px - w / 2.
+            anchor_base[index, 2] = py + h / 2.
+            anchor_base[index, 3] = px + w / 2.
+    return anchor_base
+
+height = 600
+width = 800
+feat_stride = 16
+
+since=time.time()
+anchor_base = generate_anchor_base(anchor_scales=[8,16,32], ratios=[0.5,1,2])
+
+hh = height//16
+ww = width//16
+shift_y = xp.arange(0, hh * feat_stride, feat_stride)
+shift_x = xp.arange(0, ww * feat_stride, feat_stride)
+shift_x, shift_y = xp.meshgrid(shift_x, shift_y)
+shift = xp.stack((shift_y.ravel(), shift_x.ravel(),
+                  shift_y.ravel(), shift_x.ravel()), axis=1)
+
+A = anchor_base.shape[0]
+K = shift.shape[0]
+anchor = anchor_base.reshape((1, A, 4)) + \
+         shift.reshape((1, K, 4)).transpose((1, 0, 2))
+anchor = anchor.reshape((K * A, 4)).astype(np.float32)
+print(time.time()-since)
+
+since=time.time()
+anchors_mine = gen_anchors(img_size=(height,width), 
+            receptive_field=16, 
+            scales=[8,16,32], 
+            ratios=[0.5,1,2])
+print(time.time()-since)
+
+
+
+##################################
 a
 Out[5]: 
 tensor([[[[ 0,  1,  2,  3],

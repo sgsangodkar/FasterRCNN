@@ -32,6 +32,7 @@ class VOCDataset(Dataset):
     
     def __getitem__(self, idx):
         gt_data = self.gt_parser.get_gt_data(idx) 
+        #print(gt_data['img_path'])
         img = cv2.imread(gt_data['img_path'])
         bboxes = gt_data['bboxes']
         classes = gt_data['classes']

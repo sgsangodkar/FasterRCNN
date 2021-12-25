@@ -7,7 +7,7 @@ Created on Fri Dec 10 12:31:47 2021
 """
 import torch
 import numpy as np
- 
+"""
 def calculate_iou(anchor, bbox):
     int_x = min(anchor[2], bbox[2]) - max(anchor[0], bbox[0])
     int_y = min(anchor[3], bbox[3]) - max(anchor[1], bbox[1])
@@ -28,14 +28,27 @@ def obtain_iou_matrix(bboxes1, bboxes2):
         for j, bbox2 in enumerate(bboxes2):
             iou_matrix[i,j] = calculate_iou(bbox1, bbox2)
     return iou_matrix
+"""
+def obtain_iou_matrix(bbox_a, bbox_b):
+    # top left
+    tl = torch.maximum(bbox_a[:, None, :2], bbox_b[:, :2])
+    # bottom right
+    br = torch.minimum(bbox_a[:, None, 2:], bbox_b[:, 2:])
+
+    area_i = torch.prod(br - tl, axis=2) * (tl < br).all(axis=2)
+    area_a = torch.prod(bbox_a[:, 2:] - bbox_a[:, :2], axis=1)
+    area_b = torch.prod(bbox_b[:, 2:] - bbox_b[:, :2], axis=1)
+    return area_i / (area_a[:, None] + area_b - area_i)
+
 
 def unmap(data, count, index, fill=-1):
     if len(data.shape) == 1:
-        ret = torch.zeros((count,), dtype=data.dtype)
+        ret = torch.zeros((count,), dtype=data.dtype).to(data.device)
         ret.fill_(fill)
         ret[index] = data
     else:
         ret = torch.zeros((count,) + data.shape[1:], dtype=data.dtype)
+        ret = ret.to(data.device)
         ret.fill_(fill)
         ret[index, :] = data
     return ret
