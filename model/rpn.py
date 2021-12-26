@@ -5,8 +5,6 @@ Created on Fri Dec 10 12:10:32 2021
 
 @author: sagar
 """
-import torch
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 

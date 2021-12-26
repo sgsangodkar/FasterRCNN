@@ -8,7 +8,6 @@ Created on Tue Nov 23 12:33:39 2021
 
 import time
 import torch
-import copy
 from tqdm import tqdm
 from dataset import VOCDataset
 import matplotlib.pyplot as plt
@@ -64,8 +63,7 @@ for epoch in range(config.epochs):
         img = data[0]
         bboxes = data[1]
         classes = data[2]
-        #print(log_step)
-        #since=time.time()
+        
         #trainer.train_step(img, bboxes, classes)
         trainer.val_step(img, bboxes, classes)
         #print(time.time()-since)
