@@ -110,7 +110,7 @@ class FasterRCNNTrainer(nn.Module):
             #print(time.time()-since,"For generating anchors")
             #print(anchors.shape)
             
-            since= time.time()
+            #since= time.time()
             cls_op, reg_op = self.rpn(features)
             #print(cls_op.shape, reg_op.shape)
             cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
@@ -278,7 +278,7 @@ class FasterRCNNTrainer(nn.Module):
             
             cls_op, reg_op = self.fast_rcnn(pool_feats)
 
-            print(reg_op.shape, rois.shape)
+            #print(reg_op.shape, rois.shape)
             
             if True:
                 classes = torch.argmax(cls_op, axis=1)
