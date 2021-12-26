@@ -49,7 +49,7 @@ def custom_collate(batch):
   
 dataloader = DataLoader(dataset, 
                         batch_size=config.batch_size, 
-                        shuffle=True, 
+                        shuffle=False, 
                         collate_fn = custom_collate,
                         pin_memory=True
                    )
@@ -65,8 +65,8 @@ for epoch in range(config.epochs):
         classes = data[2]
         #print(log_step)
         #since=time.time()
-        trainer.train_step(img, bboxes, classes)
-        #trainer.val_step(img, bboxes, classes)
+        #trainer.train_step(img, bboxes, classes)
+        trainer.val_step(img, bboxes, classes)
         #print(time.time()-since)
 
         if config.log:

@@ -22,6 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from torchvision.ops import RoIPool
+from torchvision.ops import nms
 
 
 class FasterRCNNTrainer(nn.Module):
@@ -138,7 +139,7 @@ class FasterRCNNTrainer(nn.Module):
             #print(cls_gt[cls_gt>-1].dtype, reg_gt[cls_gt>-1].dtype)
             #print(time.time()-since, "for RPN target generation")
             
-            since = time.time()
+            #since = time.time()
             cls_loss, reg_loss = get_rpn_loss(cls_op, 
                                               cls_gt, 
                                               reg_op, 
@@ -254,7 +255,7 @@ class FasterRCNNTrainer(nn.Module):
             anchors = gen_anchors(
                     img_size, 
                     receptive_field=16, 
-                    scales=[4,8,16], 
+                    scales=[8,16,32], 
                     ratios=[0.5,1,2]
                 )           
             cls_op, reg_op = self.rpn(features)
@@ -277,13 +278,22 @@ class FasterRCNNTrainer(nn.Module):
             
             cls_op, reg_op = self.fast_rcnn(pool_feats)
 
+            print(reg_op.shape, rois.shape)
             
             if True:
                 classes = torch.argmax(cls_op, axis=1)
                 reg_op = reg_op.view(len(reg_op), -1, 4)
-                reg_op = reg_op[torch.arange(len(reg_op)), classes-1]
+                reg_op = reg_op[classes>0]
+                reg_op = reg_op[torch.arange(len(reg_op)), classes[classes>0]-1]
+                rois = rois[classes>0]
                 bboxes = reg2bbox(rois, reg_op)
-                img_np = visualize_bboxes(img, bboxes[classes>0].detach())
+                cls_op = cls_op[classes>0]
+                fg_scores = cls_op[torch.arange(len(cls_op)),classes[classes>0]-1]
+                indices = nms(bboxes, fg_scores, 0.7)
+                bboxes = bboxes[indices[:10]]
+                classes = classes[classes>0]
+                print(classes[indices[:10]])
+                img_np = visualize_bboxes(img, bboxes.detach())
                 plt.imshow(img_np)
                 plt.show()
              
