@@ -5,21 +5,15 @@ Created on Fri Dec 10 08:20:11 2021
 
 @author: sagar
 """
-import os
 import cv2
 import torch
-import copy
+import random
 import numpy as np
-from torchvision import datasets
 from torchvision import transforms
 from torch.utils.data import Dataset
 
 from dataset.xml_parser import ParseGTxmls
-from configs import config
-
-import numpy as np
-import matplotlib.pyplot as plt
-import cv2
+from utils import hflip_bboxes, hflip_img
 
 class VOCDataset(Dataset):
     def __init__(self, data_path, data_type, min_size, random_flips):
@@ -32,7 +26,6 @@ class VOCDataset(Dataset):
     
     def __getitem__(self, idx):
         gt_data = self.gt_parser.get_gt_data(idx) 
-        #print(gt_data['img_path'])
         img = cv2.imread(gt_data['img_path'])
         bboxes = gt_data['bboxes']
         classes = gt_data['classes']
@@ -62,24 +55,12 @@ class Transformer(object):
 
         classes = torch.tensor(classes)
         difficult = torch.tensor(difficult)
-
-        if False:
-            img = img.squeeze().permute(1,2,0).cpu()
-            img_np = np.ascontiguousarray(img)
-            means = np.array((0.485, 0.456, 0.406))
-            stds = np.array((0.229, 0.224, 0.225))
-            img_np = (img_np*stds)+means
-            img_np = np.clip(img_np, 0,1)
-            img_np = (img_np*255).astype(np.uint8)
-            
-            
-            for i in range(len(bboxes)):
-                x1,y1,x2,y2 = np.array(bboxes[i], dtype=np.int16)
-                img_np = cv2.rectangle(img_np, (x1,y1), (x2,y2), (255,0,0), 3)
-                
-            plt.imshow(img_np) 
-            plt.show()
-            
+        
+        if self.random_flips:
+            if random.random()>0.5:
+                img = hflip_img(img)
+                bboxes = hflip_bboxes(bboxes, (ht_new, wt_new))
+   
         return img, bboxes, classes, difficult
  
     def scale_bboxes(self, bboxes, sx, sy):
@@ -99,4 +80,4 @@ if __name__ == '__main__':
             min_size=600,
             random_flips=True)
     
-    img, bboxes, classes, difficult = dataset[0]
+    img, bboxes, classes, difficult = dataset[6]

@@ -70,19 +70,17 @@ def reg2bbox(anchors, reg_coor):
     return torch.hstack((x1, y1, x2, y2))
 
 
-def flip_bboxes(bbox, size):
+def hflip_bboxes(bbox, size):
     H, W = size
-    bbox = bbox.copy()
-    x_max = W - bbox[:, 1]
-    x_min = W - bbox[:, 3]
-    bbox[:, 1] = x_min
-    bbox[:, 3] = x_max
-    return bbox
+    bbox_clone = bbox.clone()
+    bbox_clone[:, 0] = W - bbox[:,2]
+    bbox_clone[:, 2] = W - bbox[:,0]
+    return bbox_clone
 
 
-def flip_img(img):
+def hflip_img(img):
     # Makes a copy automatically
-    img = torch.flip(img, dims=[1])
+    img = torch.flip(img, dims=[2])
     return img
 
 def visualize_bboxes(img, bboxes):

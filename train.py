@@ -66,7 +66,6 @@ for epoch in range(config.epochs):
         
         #trainer.train_step(img, bboxes, classes)
         trainer.val_step(img, bboxes, classes)
-        #print(time.time()-since)
 
         if config.log:
              writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, log_step)      
