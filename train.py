@@ -52,11 +52,8 @@ dataloader = DataLoader(dataset,
                         collate_fn = custom_collate,
                         pin_memory=True
                    )
-
-state_dict = torch.load("trained_model.pt", map_location=torch.device('cpu'))
-trainer.load_state_dict(state_dict)
      
-log_step=0   
+it=0   
 for epoch in range(config.epochs):
     print("Epoch: {}".format(epoch+1))
     for data in dataloader:
@@ -64,17 +61,17 @@ for epoch in range(config.epochs):
         bboxes = data[1]
         classes = data[2]
         
-        #trainer.train_step(img, bboxes, classes)
+        trainer.train_step(it, img, bboxes, classes)
         trainer.val_step(img, bboxes, classes)
 
         if config.log:
-             writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, log_step)      
-             writer.add_scalar('RPN_reg', trainer.meters['rpn_reg'].mean, log_step)      
-             writer.add_scalar('FastRCNN_cls', trainer.meters['fast_rcnn_cls'].mean, log_step)      
-             writer.add_scalar('FastRCNN_reg', trainer.meters['fast_rcnn_reg'].mean, log_step)      
-             log_step+=1
+             writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, it)      
+             writer.add_scalar('RPN_reg', trainer.meters['rpn_reg'].mean, it)      
+             writer.add_scalar('FastRCNN_cls', trainer.meters['fast_rcnn_cls'].mean, it)      
+             writer.add_scalar('FastRCNN_reg', trainer.meters['fast_rcnn_reg'].mean, it)      
+        it+=1
        
 
-    filename = str(epoch+1)+'_checkpoint.pt'    
-    torch.save(trainer.state_dict(), filename)
+    prefix = 'trained_final'    
+    trainer.save_model(prefix, save_train_state=True)
 

@@ -7,8 +7,7 @@ Created on Fri Dec 10 09:14:17 2021
 """
 import torch
 import torch.nn as nn
-from torchvision import models
-from model import RPN, FastRCNN
+from model import FasterRCNN
 from utils import gen_anchors, target_gen_rpn, gen_rois, target_gen_fast_rcnn
 from utils import reg2bbox, visualize_bboxes
 from configs import config
@@ -25,22 +24,13 @@ class FasterRCNNTrainer(nn.Module):
     def __init__(self, device):
         super().__init__()
         self.device = device
-        vgg = models.vgg16(pretrained=True, progress=False)
-        self.fe = vgg.features[:-1].to(self.device)   
-        for layer in self.fe[:10]:
+            
+        self.model = FasterRCNN(config).to(self.device)
+
+        for layer in self.model.fe[:10]:
             for p in layer.parameters():
                 p.requires_grad = False
-            
-        self.rpn = RPN(config.in_chan,
-                       config.out_chan,
-                       config.anchors_per_location
-                   ).to(self.device)
-        
-        self.fast_rcnn = FastRCNN(vgg.classifier,
-                                  config.num_classes
-                              ).to(self.device)
-        
-        
+                
         self.meters = {'rpn_cls': AverageValueMeter(),
                        'rpn_reg': AverageValueMeter(),
                        'fast_rcnn_cls' : AverageValueMeter(),
@@ -52,7 +42,6 @@ class FasterRCNNTrainer(nn.Module):
                                              step_size=30000, 
                                              gamma=0.1
                                          )
-
         self.step = 0
 
     def get_optimizer(self):
@@ -78,7 +67,6 @@ class FasterRCNNTrainer(nn.Module):
     
     def rpn_train_step(self, features_l, img_size_l, bboxes_gt_l):
         rois_l = []
-        self.rpn.train()
         for data in zip(features_l, img_size_l, bboxes_gt_l):
             features = data[0]
             img_size = data[1]
@@ -91,7 +79,7 @@ class FasterRCNNTrainer(nn.Module):
                     ratios=[0.5,1,2]
                 ).to(self.device) 
             
-            cls_op, reg_op = self.rpn(features)
+            cls_op, reg_op = self.model.rpn(features)
             cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
 
             reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()
@@ -124,9 +112,7 @@ class FasterRCNNTrainer(nn.Module):
             
         return rois_l  
 
-    def fast_rcnn_train_step(self, features_l, rois_l, bboxes_gt_l, classes_gt_l):
-        self.fast_rcnn.train()
-        
+    def fast_rcnn_train_step(self, features_l, rois_l, bboxes_gt_l, classes_gt_l):        
         output_size = (config.roi_pool_size, config.roi_pool_size)
         spatial_scale = 1/config.receptive_field
         roi_layer = RoIPool(output_size, spatial_scale)
@@ -155,7 +141,7 @@ class FasterRCNNTrainer(nn.Module):
         features_b = torch.vstack(features_b)
         cls_gt_b = torch.hstack(cls_gt_b)
         reg_gt_b = torch.vstack(reg_gt_b)
-        cls_op, reg_op = self.fast_rcnn(features_b)
+        cls_op, reg_op = self.model.fast_rcnn(features_b)
       
         cls_loss, reg_loss = get_fast_rcnn_loss(cls_op, cls_gt_b, reg_op, reg_gt_b)
 
@@ -165,13 +151,14 @@ class FasterRCNNTrainer(nn.Module):
         self.meters['fast_rcnn_cls'].add(cls_loss.item())
         self.meters['fast_rcnn_reg'].add(reg_loss.item()*10)
         
-    def train_step(self, img_l, bboxes_gt_l, classes_gt_l):
-        self.fe.train()
+    def train_step(self, it, img_l, bboxes_gt_l, classes_gt_l):
+        self.model.train()
+        self.it = it
         features_l = []
         img_size_l = []
         for img in img_l:
             img = img.unsqueeze(0).to(self.device)
-            features_l.append(self.fe(img))
+            features_l.append(self.model.fe(img))
             _,_,H,W = img.shape
             img_size_l.append((H,W))
 
@@ -183,18 +170,58 @@ class FasterRCNNTrainer(nn.Module):
                     
         self.optimizer.step()
         self.scheduler.step()   
- 
+        
+    def save_model(self, prefix=None, save_train_state=False):
+        model_params = self.model.state_dict()
+      
+        if prefix == None:
+            model_filename = 'checkpoint_'+str(self.it)+'_model.pt'
+        else:
+            model_filename = prefix+'_model.pt'
+            
+        torch.save(model_params, model_filename)
+        
+        if save_train_state:
+            state_params = dict()
+            state_params['optimizer'] = self.optimizer.state_dict()
+            state_params['scheduler'] = self.scheduler.state_dict()
+            state_params['it'] = self.it
+            state_params['loss_meters'] = self.meters                  
+
+            if prefix == None:
+                state_filename = 'checkpoint_'+str(self.it)+'_state.pt'
+            else:
+                state_filename = prefix+'_state.pt'
+
+            torch.save(state_params, state_filename)
+
+    def load_model(self, prefix=None, load_train_state=False):
+        model_filename = prefix+'_model.pt'
+        model_state_dict = torch.load(model_filename)
+        self.model.load_state_dict(model_state_dict)
+        
+        if load_train_state == True:
+            state_filename = prefix+'_state.pt'
+            state_params = torch.load(state_filename)
+            self.optimizer.load_state_dict(state_params['optimizer'])   
+            self.scheduler.load_state_dict(state_params['scheduler'])   
+            self.it = state_params['it']  
+            self.loss_meters = state_params['loss_meters']  
+        
     def val_step(self, img_l, bboxes_gt_l, classes_gt_l):
-        self.fe.eval()
-        self.rpn.eval()
-        self.fast_rcnn.eval()
+        self.model.eval()
+        """
+        TODO:
+            if accuracy > best_acc:
+                call savemodel function
+        """
         output_size = (config.roi_pool_size, config.roi_pool_size)
         spatial_scale = 1/config.receptive_field
         roi_layer = RoIPool(output_size, spatial_scale)
         
         for img, bboxes_gt in zip(img_l, bboxes_gt_l):
             img = img.unsqueeze(0).to(self.device)
-            features = self.fe(img)
+            features = self.model.fe(img)
             _,_,H,W = img.shape
             img_size = (H,W)
 
@@ -204,7 +231,7 @@ class FasterRCNNTrainer(nn.Module):
                     scales=[8,16,32], 
                     ratios=[0.5,1,2]
                 )           
-            cls_op, reg_op = self.rpn(features)
+            cls_op, reg_op = self.model.rpn(features)
             cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
             reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()
             
@@ -222,7 +249,7 @@ class FasterRCNNTrainer(nn.Module):
                 pool = roi_layer(features, [rois])
                 pool_feats = pool.view(pool.size(0), -1)
             
-            cls_op, reg_op = self.fast_rcnn(pool_feats)
+            cls_op, reg_op = self.model.fast_rcnn(pool_feats)
             
             if True:
                 classes = torch.argmax(cls_op, axis=1)
