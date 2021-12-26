@@ -134,7 +134,7 @@ class FasterRCNNTrainer(nn.Module):
             #print(torch.mean(rois[:,3]-rois[:,1]))
             #print(bboxes_gt)
             
-            since=time.time()
+            #since=time.time()
             cls_gt, reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
             #print(cls_gt[cls_gt>-1].dtype, reg_gt[cls_gt>-1].dtype)
             #print(time.time()-since, "for RPN target generation")

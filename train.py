@@ -49,12 +49,13 @@ def custom_collate(batch):
   
 dataloader = DataLoader(dataset, 
                         batch_size=config.batch_size, 
-                        shuffle=False, 
+                        shuffle=True, 
                         collate_fn = custom_collate,
                         pin_memory=True
                    )
 
-
+state_dict = torch.load("trained_model.pt", map_location=torch.device('cpu'))
+trainer.load_state_dict(state_dict)
      
 log_step=0   
 for epoch in range(config.epochs):
