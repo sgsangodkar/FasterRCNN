@@ -7,7 +7,7 @@ Created on Fri Dec 10 12:31:47 2021
 """
 import torch
 import numpy as np
- 
+"""
 def calculate_iou(anchor, bbox):
     int_x = min(anchor[2], bbox[2]) - max(anchor[0], bbox[0])
     int_y = min(anchor[3], bbox[3]) - max(anchor[1], bbox[1])
@@ -28,14 +28,27 @@ def obtain_iou_matrix(bboxes1, bboxes2):
         for j, bbox2 in enumerate(bboxes2):
             iou_matrix[i,j] = calculate_iou(bbox1, bbox2)
     return iou_matrix
+"""
+def obtain_iou_matrix(bbox_a, bbox_b):
+    # top left
+    tl = torch.maximum(bbox_a[:, None, :2], bbox_b[:, :2])
+    # bottom right
+    br = torch.minimum(bbox_a[:, None, 2:], bbox_b[:, 2:])
+
+    area_i = torch.prod(br - tl, axis=2) * (tl < br).all(axis=2)
+    area_a = torch.prod(bbox_a[:, 2:] - bbox_a[:, :2], axis=1)
+    area_b = torch.prod(bbox_b[:, 2:] - bbox_b[:, :2], axis=1)
+    return area_i / (area_a[:, None] + area_b - area_i)
+
 
 def unmap(data, count, index, fill=-1):
     if len(data.shape) == 1:
-        ret = torch.empty((count,), dtype=data.dtype)
+        ret = torch.zeros((count,), dtype=data.dtype).to(data.device)
         ret.fill_(fill)
         ret[index] = data
     else:
-        ret = torch.empty((count,) + data.shape[1:], dtype=data.dtype)
+        ret = torch.zeros((count,) + data.shape[1:], dtype=data.dtype)
+        ret = ret.to(data.device)
         ret.fill_(fill)
         ret[index, :] = data
     return ret
@@ -68,12 +81,54 @@ def get_x1y1x2y2(x,y,w,h):
     return x1,y1,x2,y2
 
 def reg2bbox(anchors, reg_coor):
+    #print("in reg2bbox")
+    #print(reg_coor[0:4])
     x1a,y1a,x2a,y2a = torch.split(anchors,1,dim=1)
     xa, ya, wa, ha = get_xywh(x1a,y1a,x2a,y2a)
     x = reg_coor[:,0:1]*wa + xa
     y = reg_coor[:,1:2]*ha + ya
+    #print(reg_coor[0:4,1:2],ha[0:4],ya[0:4],y[0:4])
     w = torch.pow(np.e, reg_coor[:,2:3])*wa
     h = torch.pow(np.e, reg_coor[:,3:4])*ha    
     x1,y1,x2,y2 = get_x1y1x2y2(x,y,w,h)
     return torch.hstack((x1, y1, x2, y2))
-   
+
+
+def flip_bboxes(bbox, size):
+    H, W = size
+    bbox = bbox.copy()
+    x_max = W - bbox[:, 1]
+    x_min = W - bbox[:, 3]
+    bbox[:, 1] = x_min
+    bbox[:, 3] = x_max
+    return bbox
+
+
+def flip_img(img):
+    # Makes a copy automatically
+    img = torch.flip(img, dims=[1])
+    return img
+
+import cv2
+def visualize_bboxes(img, bboxes):
+    img = img.squeeze().permute(1,2,0).cpu()
+    img_np = np.ascontiguousarray(img)
+    means = np.array((0.485, 0.456, 0.406))
+    stds = np.array((0.229, 0.224, 0.225))
+    img_np = (img_np*stds)+means
+    img_np = np.clip(img_np, 0,1)
+    img_np = (img_np*255).astype(np.uint8)
+    
+    #print(rpn_reg_gt[rpn_cls_gt==1])
+    #print(img_np.shape)
+
+    #print(anchors.dtype, rpn_reg_gt.dtype, rpn_bboxes.dtype, "Here2")
+    #print(len(rpn_bboxes))
+    for i in range(len(bboxes)):
+        x1,y1,x2,y2 = np.array(bboxes[i], dtype=np.uint16)
+        #print(x1,y1,x2,y2,"RPN", rpn_bboxes[i], rpn_reg_gt[rpn_cls_gt==1][i])
+        img_np = cv2.rectangle(img_np, (x1,y1), (x2,y2), (0,255,0), 3)
+        
+    #print(len(bboxes_gt))
+    
+    return img_np.copy()

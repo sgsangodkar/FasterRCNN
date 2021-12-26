@@ -5,35 +5,44 @@ Created on Fri Dec 10 09:14:17 2021
 
 @author: sagar
 """
-
+import time
 import torch
 import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
 from model import RPN, FastRCNN
 from utils import gen_anchors, target_gen_rpn, gen_rois, target_gen_fast_rcnn
+from utils import reg2bbox, visualize_bboxes
 from configs import config
-from loss import faster_rcnn_loss
+from loss import faster_rcnn_loss, get_rpn_loss, get_fast_rcnn_loss
 from torchnet.meter import AverageValueMeter
 import torch.optim as optim
 from torch.optim import lr_scheduler
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+from torchvision.ops import RoIPool
+from torchvision.ops import nms
+
 
 class FasterRCNNTrainer(nn.Module):
-    def __init__(self, device, writer=None):
+    def __init__(self, device):
         super().__init__()
+        self.device = device
         vgg = models.vgg16(pretrained=True, progress=False)
-        self.fe = vgg.features[:-1].to(device)   
-        
+        self.fe = vgg.features[:-1].to(self.device)   
+        for layer in self.fe[:10]:
+            for p in layer.parameters():
+                p.requires_grad = False
+            
         self.rpn = RPN(config.in_chan,
                        config.out_chan,
                        config.anchors_per_location
-                   ).to(device)
+                   ).to(self.device)
         
         self.fast_rcnn = FastRCNN(vgg.classifier,
-                                  config.num_classes,
-                                  config.roi_pool_size,
-                                  config.receptive_field
-                              ).to(device)
+                                  config.num_classes
+                              ).to(self.device)
         
         
         self.meters = {'rpn_cls': AverageValueMeter(),
@@ -41,185 +50,250 @@ class FasterRCNNTrainer(nn.Module):
                        'fast_rcnn_cls' : AverageValueMeter(),
                        'fast_rcnn_reg' : AverageValueMeter()
                       }
-        self.writer = writer
         self.optimizer = self.get_optimizer()
-        #Per layer learning rate??
-        #VGG conv3_1 and above make learnable
+        #print(self.optimizer)
         
         self.scheduler = lr_scheduler.StepLR(self.optimizer, 
-                                             step_size=20000, 
+                                             step_size=30000, 
                                              gamma=0.1
                                          )
 
         self.step = 0
-
+    """
+    TODO:
+        check if roi size <7x7:
+            what is the pool output?
+            Is there an error?
+    """
     def get_optimizer(self):
-       
         lr = config.lr
         params = []
         for key, value in dict(self.named_parameters()).items():
             if value.requires_grad:
-                if 'bias' in key:
-                    params += [{'params': [value], 'lr': lr * 2, 'weight_decay': 0}]
-                else:
-                    params += [{'params': [value], 'lr': lr, 'weight_decay': 0.0005}]
+                #if 'fe' in key:
+                #    params += [{'params': [value], 'lr': lr}]
+                
+                if 'fast_rcnn' in key:
+                    if 'bias' in key:
+                        params += [{'params': [value], 'lr': lr*2}]
+                    else:
+                        params += [{'params': [value], 'lr': lr}]
+               
+           
+                else:    
+                    params += [{'params': [value], 'lr': lr}]
         
         self.optimizer = optim.SGD(params, 
-                                   momentum=0.9
+                                   momentum=0.9,
+                                   weight_decay=0.0005
                                 )
+        #self.optimizer = optim.Adam(params)
         return self.optimizer
-    # optimizer can only optimize Tensors, but one of the params 
-    #is Module.parameters     
+ 
     
-    def forward(self, img, bboxes_gt, classes_gt):
-        #print("inside forward")
-        features = self.fe(img)
-
-        _,_,W,H = img.shape
-        img_size = (W,H)
-        
-        anchors = gen_anchors(
-                img_size, 
-                receptive_field=16, 
-                scales=[8,16,32], 
-                ratios=[0.5,1,2]
-            )  
-        
-        rpn_cls_gt, rpn_reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
-        #print("Target RPN Success")
-        
-        rpn_cls_op, rpn_reg_op = self.rpn(features)
-        #print("RPN Success")
-        rpn_cls_op = rpn_cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
-        rpn_reg_op = rpn_reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()      
-
-        rpn_gt = (rpn_cls_gt, rpn_reg_gt)
-        rpn_op = (rpn_cls_op, rpn_reg_op)
-        
-        #print(rpn_cls_op.shape, rpn_cls_gt.shape, rpn_reg_op.shape, rpn_reg_gt.shape)
-
-        #print(rpn_cls_loss, rpn_reg_loss)
-        #print(rpn_cls_gt.shape, rpn_reg_gt.shape)
-        rois = gen_rois(rpn_cls_op.detach(), 
-                        rpn_reg_op.detach(), 
-                        anchors, 
-                        img_size
-                    )
-        
-        rois, fast_rcnn_cls_gt, fast_rcnn_reg_gt = target_gen_fast_rcnn(rois, 
-                                                                        bboxes_gt, 
-                                                                        classes_gt
-                                                                    )
-        #print("Target FastRCNN Success")
-        #print(rois.shape, roi_cls_gt.shape, roi_reg_gt.shape)        
-        fast_rcnn_cls_op, fast_rcnn_reg_op = self.fast_rcnn(features, rois)
-        #print("Fast RCNN Success")
-        
-        fast_rcnn_gt = (fast_rcnn_cls_gt, fast_rcnn_reg_gt)
-        fast_rcnn_op = (fast_rcnn_cls_op, fast_rcnn_reg_op)
-        #print(roi_cls_op.shape, roi_reg_op.shape)
-        # 128x21, 128X(20*4)
-        
-        return rpn_gt, rpn_op, fast_rcnn_gt, fast_rcnn_op
-    
-        
-    def train_step(self, img, bboxes_gt, classes_gt):
-        #print("inside train step")
-        self.fe.train()
+    def rpn_train_step(self, features_l, img_size_l, bboxes_gt_l):
+        #print("inside rpn_train_step")
+        rois_l = []
         self.rpn.train()
+        for data in zip(features_l, img_size_l, bboxes_gt_l):
+            features = data[0]
+            img_size = data[1]
+            bboxes_gt = data[2].to(self.device)
+            
+            #since=time.time()
+            anchors = gen_anchors(
+                    img_size, 
+                    receptive_field=16, 
+                    scales=[8,16,32], 
+                    ratios=[0.5,1,2]
+                ).to(self.device) 
+            #print(time.time()-since,"For generating anchors")
+            #print(anchors.shape)
+            
+            since= time.time()
+            cls_op, reg_op = self.rpn(features)
+            #print(cls_op.shape, reg_op.shape)
+            cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
+            """
+            Check the permutation using sample example
+            """
+            reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()
+            #print(time.time()-since,"For RPN model pass")
+            
+            #since=time.time()
+            rois = gen_rois(cls_op.detach(), 
+                            reg_op.detach(), 
+                            anchors, 
+                            img_size
+                        )
+            #print(time.time()-since, "for Generating proposals")
+            rois_l.append(rois) # x1, y1, x2, y2
+            #print(rois.dtype, rois.shape)
+            #print(rois)
+            #print(torch.mean(rois[:,2]-rois[:,0]))
+            #print(torch.mean(rois[:,3]-rois[:,1]))
+            #print(bboxes_gt)
+            
+            #since=time.time()
+            cls_gt, reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
+            #print(cls_gt[cls_gt>-1].dtype, reg_gt[cls_gt>-1].dtype)
+            #print(time.time()-since, "for RPN target generation")
+            
+            #since = time.time()
+            cls_loss, reg_loss = get_rpn_loss(cls_op, 
+                                              cls_gt, 
+                                              reg_op, 
+                                              reg_gt
+                                          )
+            #print(time.time()-since, "RPN loss calculation")            
+                              
+            #print(cls_loss,reg_loss)
+            
+            rpn_loss = cls_loss + 10*reg_loss 
+            rpn_loss = rpn_loss/config.batch_size # Loss normalisation
+            
+            #since=time.time()
+            rpn_loss.backward(retain_graph=True)
+            #print(time.time()-since, "FOr backward pass")
+            # Graph retained so as to use for fast-rcnn backward pass
+
+            self.meters['rpn_cls'].add(cls_loss.item())
+            self.meters['rpn_reg'].add(reg_loss.item()*10)
+            
+
+            #print(rois)
+            
+        return rois_l  
+
+    def fast_rcnn_train_step(self, features_l, rois_l, bboxes_gt_l, classes_gt_l):
+        #print("inside fast_rcnn_train_step")
         self.fast_rcnn.train()
         
-        self.step += 1
-        self.optimizer.zero_grad()    
-        rpn_gt, rpn_op, fast_rcnn_gt, fast_rcnn_op = self.forward(img, 
-                                                                  bboxes_gt, 
-                                                                  classes_gt
-                                                              )   
-        #print("Computing Loss")
-        loss_total, loss_dict = faster_rcnn_loss(rpn_gt, 
-                                                 rpn_op, 
-                                                 fast_rcnn_gt, 
-                                                 fast_rcnn_op
-                                             )
-        #print("Loss Computed")
-        loss_total.backward()
+        output_size = (config.roi_pool_size, config.roi_pool_size)
+        spatial_scale = 1/config.receptive_field
+        roi_layer = RoIPool(output_size, spatial_scale)
         
-        for key, value in loss_dict.items():
-            self.meters[key].add(value.item())
+        features_b = []
+        cls_gt_b = []
+        reg_gt_b = []
+
+        for data in zip(features_l, rois_l, bboxes_gt_l, classes_gt_l):
+            features = data[0]
+            rois = data[1]
+            bboxes_gt = data[2].to(self.device)
+            classes_gt = data[3].to(self.device)
+            
+            #op = visualize_bboxes(img, rois[0:20])
+            #plt.imshow(op)
+            #plt.show()
+            
+            rois, cls_gt, reg_gt = target_gen_fast_rcnn(rois, 
+                                                        bboxes_gt, 
+                                                        classes_gt
+                                                    )    
+            pool = roi_layer(features, [rois])
+            pool = pool.view(pool.size(0), -1)
+            features_b.append(pool)
+            cls_gt_b.append(cls_gt)
+            reg_gt_b.append(reg_gt)
+                
+           #print(cls_gt, reg_gt)
+        features_b = torch.vstack(features_b)
+        cls_gt_b = torch.hstack(cls_gt_b)
+        reg_gt_b = torch.vstack(reg_gt_b)
+        cls_op, reg_op = self.fast_rcnn(features_b)
+      
+        #print(cls_op.shape, cls_gt_b.shape, reg_op.shape, reg_gt_b.shape)
+        cls_loss, reg_loss = get_fast_rcnn_loss(cls_op, cls_gt_b, reg_op, reg_gt_b)
+
+        fast_rcnn_loss = cls_loss + 10*reg_loss 
+        fast_rcnn_loss.backward()
+        #print(torch.mean(reg_gt_b, dim=1), torch.std(reg_gt_b, dim=1))
+        #print(cls_loss, reg_loss)
+
+        self.meters['fast_rcnn_cls'].add(cls_loss.item())
+        self.meters['fast_rcnn_reg'].add(reg_loss.item()*10)
+        
+    def train_step(self, img_l, bboxes_gt_l, classes_gt_l):
+        #print("inside train step")
+        self.fe.train()
+        features_l = []
+        img_size_l = []
+        for img in img_l:
+            img = img.unsqueeze(0).to(self.device)
+            features_l.append(self.fe(img))
+            _,_,H,W = img.shape
+            img_size_l.append((H,W))
+
+        self.optimizer.zero_grad()   
+        #since = time.time()
+        rois_l = self.rpn_train_step(features_l, img_size_l, bboxes_gt_l)
+        #print(time.time()-since, "For RPN step")
+        
+        #since = time.time()
+        self.fast_rcnn_train_step(features_l, rois_l, bboxes_gt_l, classes_gt_l)
+        #print(time.time()-since, "For FRCNN step")
+            
                     
         self.optimizer.step()
         self.scheduler.step()   
+ 
+    def val_step(self, img_l, bboxes_gt_l, classes_gt_l):
+        self.fe.eval()
+        self.rpn.eval()
+        self.fast_rcnn.eval()
+        output_size = (config.roi_pool_size, config.roi_pool_size)
+        spatial_scale = 1/config.receptive_field
+        roi_layer = RoIPool(output_size, spatial_scale)
         
-        if self.writer is not None:      
-             self.writer.add_scalar('RPN_cls', loss_dict['rpn_cls'], self.step)      
-             self.writer.add_scalar('RPN_reg', loss_dict['rpn_reg'], self.step)      
-             self.writer.add_scalar('FastRCNN_cls', loss_dict['fast_rcnn_cls'], self.step)      
-             self.writer.add_scalar('FastRCNN_reg', loss_dict['fast_rcnn_reg'], self.step)      
+        for img, bboxes_gt in zip(img_l, bboxes_gt_l):
+            img = img.unsqueeze(0).to(self.device)
+            features = self.fe(img)
+            _,_,H,W = img.shape
+            img_size = (H,W)
 
-    #def val_step(self, img, bboxes_gt, classes_gt):
-    """
-    TO DO
-    Study difference between and and &
-    detach, item usage, separate tensor?
-    using detach for loss dictionary is good?
-    
-    weighting of loss components
-    optimiser: conv3_1 and upper learnable
-    target generation FastRCNN: normalisation
-    using train val and test sets
-    
-    eval method
-    
-    """
-                
-    """    
-    def init_running_losses(self):
-        self.running_rpn_cls_loss = 0
-        self.running_rpn_cls_cnt = 0
-        self.running_rpn_reg_loss = 0
-        self.running_rpn_reg_cnt = 0
-        
-    def loss_logger(self, rpn_cls_loss_t, rpn_reg_loss_t):
-        # running statistics                
-        self.running_rpn_cls_loss += rpn_cls_loss_t[0].item()   
-        self.running_rpn_cls_cnt += rpn_cls_loss_t[1]   
-        rpn_cls = self.running_rpn_cls_loss/self.running_rpn_cls_cnt
-        if self.writer!=None:
-            self.writer.add_scalar('RPN_cls_loss', rpn_cls, self.step/self.log_step)
-        
-        self.running_rpn_reg_loss += rpn_reg_loss_t[0].item()   
-        self.running_rpn_reg_cnt += rpn_reg_loss_t[1]     
-        rpn_reg = self.running_rpn_reg_loss/self.running_rpn_reg_cnt
-        if self.writer!=None:
-            self.writer.add_scalar('RPN_reg_loss', rpn_reg, self.step/self.log_step)
-        
-        if self.display:
-            print('Step: {}. RPN_cls: {:.4f}, RPN_reg: {:.4f}'
-                  .format(self.step, rpn_cls, rpn_reg))
-
-
-
-
-        roi_cls_loss, roi_reg_loss = fast_rcnn_loss(
-                                            roi_cls_op, 
-                                            roi_cls_gt, 
-                                            roi_reg_op, 
-                                            roi_reg_gt
-                                        )
-        print(roi_cls_loss, roi_reg_loss)
-
-        #if self.step % self.log_step == 0:
-            #self.loss_logger(rpn_cls_loss_t, rpn_reg_loss_t)
+            anchors = gen_anchors(
+                    img_size, 
+                    receptive_field=16, 
+                    scales=[8,16,32], 
+                    ratios=[0.5,1,2]
+                )           
+            cls_op, reg_op = self.rpn(features)
+            cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
+            reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()
             
-        #loss = rpn_cls_loss_t[0]/rpn_cls_loss_t[1] + rpn_reg_loss_t[0]/rpn_reg_loss_t[1]
+            rois = gen_rois(cls_op.detach(), 
+                            reg_op.detach(), 
+                            anchors, 
+                            img_size
+                        ) # x1, y1, x2, y2
             
-        #return loss
+            im1 = visualize_bboxes(img, bboxes_gt)
+            plt.imshow(im1)
+            plt.show()
+            
+            if len(rois)>0:
+                pool = roi_layer(features, [rois])
+                pool_feats = pool.view(pool.size(0), -1)
+            
+            cls_op, reg_op = self.fast_rcnn(pool_feats)
 
-        rpn_cls_loss, rpn_reg_loss = rpn_loss(
-                                            rpn_cls_op, 
-                                            rpn_cls_gt, 
-                                            rpn_reg_op, 
-                                            rpn_reg_gt
-                                        )        
-    """    
-        
+            print(reg_op.shape, rois.shape)
+            
+            if True:
+                classes = torch.argmax(cls_op, axis=1)
+                reg_op = reg_op.view(len(reg_op), -1, 4)
+                reg_op = reg_op[classes>0]
+                reg_op = reg_op[torch.arange(len(reg_op)), classes[classes>0]-1]
+                rois = rois[classes>0]
+                bboxes = reg2bbox(rois, reg_op)
+                cls_op = cls_op[classes>0]
+                fg_scores = cls_op[torch.arange(len(cls_op)),classes[classes>0]-1]
+                indices = nms(bboxes, fg_scores, 0.7)
+                bboxes = bboxes[indices[:10]]
+                classes = classes[classes>0]
+                print(classes[indices[:10]])
+                img_np = visualize_bboxes(img, bboxes.detach())
+                plt.imshow(img_np)
+                plt.show()
+             

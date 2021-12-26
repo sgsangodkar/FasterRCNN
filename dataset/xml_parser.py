@@ -50,6 +50,7 @@ class ParseGTxmls(object):
         xml_path = os.path.join(self.data_path, 
                                 'Annotations', 
                                 self.img_ids[idx]+'.xml')
+        #print(self.img_ids[idx])
         tree = ET.parse(xml_path)
         objects = tree.findall('object')    
         
