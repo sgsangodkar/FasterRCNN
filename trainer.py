@@ -5,22 +5,18 @@ Created on Fri Dec 10 09:14:17 2021
 
 @author: sagar
 """
-import time
 import torch
 import torch.nn as nn
 from torchvision import models
-import torch.nn.functional as F
 from model import RPN, FastRCNN
 from utils import gen_anchors, target_gen_rpn, gen_rois, target_gen_fast_rcnn
 from utils import reg2bbox, visualize_bboxes
 from configs import config
-from loss import faster_rcnn_loss, get_rpn_loss, get_fast_rcnn_loss
+from loss import get_rpn_loss, get_fast_rcnn_loss
 from torchnet.meter import AverageValueMeter
 import torch.optim as optim
 from torch.optim import lr_scheduler
-import numpy as np
 import matplotlib.pyplot as plt
-import cv2
 from torchvision.ops import RoIPool
 from torchvision.ops import nms
 
@@ -51,7 +47,6 @@ class FasterRCNNTrainer(nn.Module):
                        'fast_rcnn_reg' : AverageValueMeter()
                       }
         self.optimizer = self.get_optimizer()
-        #print(self.optimizer)
         
         self.scheduler = lr_scheduler.StepLR(self.optimizer, 
                                              step_size=30000, 
@@ -59,27 +54,18 @@ class FasterRCNNTrainer(nn.Module):
                                          )
 
         self.step = 0
-    """
-    TODO:
-        check if roi size <7x7:
-            what is the pool output?
-            Is there an error?
-    """
+
     def get_optimizer(self):
         lr = config.lr
         params = []
         for key, value in dict(self.named_parameters()).items():
             if value.requires_grad:
-                #if 'fe' in key:
-                #    params += [{'params': [value], 'lr': lr}]
-                
                 if 'fast_rcnn' in key:
                     if 'bias' in key:
                         params += [{'params': [value], 'lr': lr*2}]
                     else:
                         params += [{'params': [value], 'lr': lr}]
-               
-           
+
                 else:    
                     params += [{'params': [value], 'lr': lr}]
         
@@ -87,12 +73,10 @@ class FasterRCNNTrainer(nn.Module):
                                    momentum=0.9,
                                    weight_decay=0.0005
                                 )
-        #self.optimizer = optim.Adam(params)
         return self.optimizer
  
     
     def rpn_train_step(self, features_l, img_size_l, bboxes_gt_l):
-        #print("inside rpn_train_step")
         rois_l = []
         self.rpn.train()
         for data in zip(features_l, img_size_l, bboxes_gt_l):
@@ -100,73 +84,47 @@ class FasterRCNNTrainer(nn.Module):
             img_size = data[1]
             bboxes_gt = data[2].to(self.device)
             
-            #since=time.time()
             anchors = gen_anchors(
                     img_size, 
                     receptive_field=16, 
                     scales=[8,16,32], 
                     ratios=[0.5,1,2]
                 ).to(self.device) 
-            #print(time.time()-since,"For generating anchors")
-            #print(anchors.shape)
             
-            #since= time.time()
             cls_op, reg_op = self.rpn(features)
-            #print(cls_op.shape, reg_op.shape)
             cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
-            """
-            Check the permutation using sample example
-            """
+
             reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()
-            #print(time.time()-since,"For RPN model pass")
             
-            #since=time.time()
             rois = gen_rois(cls_op.detach(), 
                             reg_op.detach(), 
                             anchors, 
                             img_size
                         )
-            #print(time.time()-since, "for Generating proposals")
             rois_l.append(rois) # x1, y1, x2, y2
-            #print(rois.dtype, rois.shape)
-            #print(rois)
-            #print(torch.mean(rois[:,2]-rois[:,0]))
-            #print(torch.mean(rois[:,3]-rois[:,1]))
-            #print(bboxes_gt)
+
             
-            #since=time.time()
             cls_gt, reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
-            #print(cls_gt[cls_gt>-1].dtype, reg_gt[cls_gt>-1].dtype)
-            #print(time.time()-since, "for RPN target generation")
-            
-            #since = time.time()
+
             cls_loss, reg_loss = get_rpn_loss(cls_op, 
                                               cls_gt, 
                                               reg_op, 
                                               reg_gt
-                                          )
-            #print(time.time()-since, "RPN loss calculation")            
-                              
-            #print(cls_loss,reg_loss)
+                                          )                              
             
             rpn_loss = cls_loss + 10*reg_loss 
             rpn_loss = rpn_loss/config.batch_size # Loss normalisation
             
-            #since=time.time()
             rpn_loss.backward(retain_graph=True)
-            #print(time.time()-since, "FOr backward pass")
             # Graph retained so as to use for fast-rcnn backward pass
 
             self.meters['rpn_cls'].add(cls_loss.item())
             self.meters['rpn_reg'].add(reg_loss.item()*10)
             
-
-            #print(rois)
             
         return rois_l  
 
     def fast_rcnn_train_step(self, features_l, rois_l, bboxes_gt_l, classes_gt_l):
-        #print("inside fast_rcnn_train_step")
         self.fast_rcnn.train()
         
         output_size = (config.roi_pool_size, config.roi_pool_size)
@@ -183,9 +141,6 @@ class FasterRCNNTrainer(nn.Module):
             bboxes_gt = data[2].to(self.device)
             classes_gt = data[3].to(self.device)
             
-            #op = visualize_bboxes(img, rois[0:20])
-            #plt.imshow(op)
-            #plt.show()
             
             rois, cls_gt, reg_gt = target_gen_fast_rcnn(rois, 
                                                         bboxes_gt, 
@@ -197,25 +152,20 @@ class FasterRCNNTrainer(nn.Module):
             cls_gt_b.append(cls_gt)
             reg_gt_b.append(reg_gt)
                 
-           #print(cls_gt, reg_gt)
         features_b = torch.vstack(features_b)
         cls_gt_b = torch.hstack(cls_gt_b)
         reg_gt_b = torch.vstack(reg_gt_b)
         cls_op, reg_op = self.fast_rcnn(features_b)
       
-        #print(cls_op.shape, cls_gt_b.shape, reg_op.shape, reg_gt_b.shape)
         cls_loss, reg_loss = get_fast_rcnn_loss(cls_op, cls_gt_b, reg_op, reg_gt_b)
 
         fast_rcnn_loss = cls_loss + 10*reg_loss 
         fast_rcnn_loss.backward()
-        #print(torch.mean(reg_gt_b, dim=1), torch.std(reg_gt_b, dim=1))
-        #print(cls_loss, reg_loss)
 
         self.meters['fast_rcnn_cls'].add(cls_loss.item())
         self.meters['fast_rcnn_reg'].add(reg_loss.item()*10)
         
     def train_step(self, img_l, bboxes_gt_l, classes_gt_l):
-        #print("inside train step")
         self.fe.train()
         features_l = []
         img_size_l = []
@@ -226,13 +176,9 @@ class FasterRCNNTrainer(nn.Module):
             img_size_l.append((H,W))
 
         self.optimizer.zero_grad()   
-        #since = time.time()
         rois_l = self.rpn_train_step(features_l, img_size_l, bboxes_gt_l)
-        #print(time.time()-since, "For RPN step")
         
-        #since = time.time()
         self.fast_rcnn_train_step(features_l, rois_l, bboxes_gt_l, classes_gt_l)
-        #print(time.time()-since, "For FRCNN step")
             
                     
         self.optimizer.step()
@@ -277,8 +223,6 @@ class FasterRCNNTrainer(nn.Module):
                 pool_feats = pool.view(pool.size(0), -1)
             
             cls_op, reg_op = self.fast_rcnn(pool_feats)
-
-            #print(reg_op.shape, rois.shape)
             
             if True:
                 classes = torch.argmax(cls_op, axis=1)
