@@ -9,15 +9,13 @@ import torch
 import torch.nn as nn
 from model import FasterRCNN
 from utils import gen_anchors, target_gen_rpn, gen_rois, target_gen_fast_rcnn
-from utils import reg2bbox, visualize_bboxes
 from configs import config
 from loss import get_rpn_loss, get_fast_rcnn_loss
 from torchnet.meter import AverageValueMeter
 import torch.optim as optim
 from torch.optim import lr_scheduler
-import matplotlib.pyplot as plt
 from torchvision.ops import RoIPool
-from torchvision.ops import nms
+from torch.utils.tensorboard import SummaryWriter
 
 
 class FasterRCNNTrainer(nn.Module):
@@ -25,12 +23,14 @@ class FasterRCNNTrainer(nn.Module):
         super().__init__()
         self.device = device
             
-        self.model = FasterRCNN(config).to(self.device)
+        self.model = FasterRCNN(config.num_classes).to(self.device)
 
         for layer in self.model.fe[:10]:
             for p in layer.parameters():
                 p.requires_grad = False
-                
+         
+        self.it = 0
+        
         self.meters = {'rpn_cls': AverageValueMeter(),
                        'rpn_reg': AverageValueMeter(),
                        'fast_rcnn_cls' : AverageValueMeter(),
@@ -42,8 +42,15 @@ class FasterRCNNTrainer(nn.Module):
                                              step_size=30000, 
                                              gamma=0.1
                                          )
-        self.step = 0
-
+        self.writer = SummaryWriter()
+        
+        self.receptive_field = 16
+        
+        pool_size = 7
+        output_size = (pool_size, pool_size)
+        spatial_scale = 1/self.receptive_field
+        self.roi_layer = RoIPool(output_size, spatial_scale)  
+        
     def get_optimizer(self):
         lr = config.lr
         params = []
@@ -74,7 +81,7 @@ class FasterRCNNTrainer(nn.Module):
             
             anchors = gen_anchors(
                     img_size, 
-                    receptive_field=16, 
+                    self.receptive_field, 
                     scales=[8,16,32], 
                     ratios=[0.5,1,2]
                 ).to(self.device) 
@@ -91,17 +98,16 @@ class FasterRCNNTrainer(nn.Module):
                         )
             rois_l.append(rois) # x1, y1, x2, y2
 
-            
             cls_gt, reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
 
             cls_loss, reg_loss = get_rpn_loss(cls_op, 
-                                              cls_gt, 
+                                              cls_gt.to(self.device), 
                                               reg_op, 
-                                              reg_gt
+                                              reg_gt.to(self.device)
                                           )                              
             
             rpn_loss = cls_loss + 10*reg_loss 
-            rpn_loss = rpn_loss/config.batch_size # Loss normalisation
+            rpn_loss = rpn_loss/config.train_batch_size # Loss normalisation
             
             rpn_loss.backward(retain_graph=True)
             # Graph retained so as to use for fast-rcnn backward pass
@@ -113,9 +119,6 @@ class FasterRCNNTrainer(nn.Module):
         return rois_l  
 
     def fast_rcnn_train_step(self, features_l, rois_l, bboxes_gt_l, classes_gt_l):        
-        output_size = (config.roi_pool_size, config.roi_pool_size)
-        spatial_scale = 1/config.receptive_field
-        roi_layer = RoIPool(output_size, spatial_scale)
         
         features_b = []
         cls_gt_b = []
@@ -132,7 +135,7 @@ class FasterRCNNTrainer(nn.Module):
                                                         bboxes_gt, 
                                                         classes_gt
                                                     )    
-            pool = roi_layer(features, [rois])
+            pool = self.roi_layer(features, [rois])
             pool = pool.view(pool.size(0), -1)
             features_b.append(pool)
             cls_gt_b.append(cls_gt)
@@ -151,9 +154,9 @@ class FasterRCNNTrainer(nn.Module):
         self.meters['fast_rcnn_cls'].add(cls_loss.item())
         self.meters['fast_rcnn_reg'].add(reg_loss.item()*10)
         
-    def train_step(self, it, img_l, bboxes_gt_l, classes_gt_l):
+    def train_step(self, img_l, bboxes_gt_l, classes_gt_l):
         self.model.train()
-        self.it = it
+        self.it += 1
         features_l = []
         img_size_l = []
         for img in img_l:
@@ -170,6 +173,13 @@ class FasterRCNNTrainer(nn.Module):
                     
         self.optimizer.step()
         self.scheduler.step()   
+
+        if config.log:
+             self.writer.add_scalar('RPN_cls', self.meters['rpn_cls'].mean, self.it)      
+             self.writer.add_scalar('RPN_reg', self.meters['rpn_reg'].mean, self.it)      
+             self.writer.add_scalar('FastRCNN_cls', self.meters['fast_rcnn_cls'].mean, self.it)      
+             self.writer.add_scalar('FastRCNN_reg', self.meters['fast_rcnn_reg'].mean, self.it)      
+
         
     def save_model(self, prefix=None, save_train_state=False):
         model_params = self.model.state_dict()
@@ -183,10 +193,10 @@ class FasterRCNNTrainer(nn.Module):
         
         if save_train_state:
             state_params = dict()
-            state_params['optimizer'] = self.optimizer.state_dict()
-            state_params['scheduler'] = self.scheduler.state_dict()
             state_params['it'] = self.it
-            state_params['loss_meters'] = self.meters                  
+            state_params['meters'] = self.meters  
+            state_params['optimizer'] = self.optimizer.state_dict()
+            state_params['scheduler'] = self.scheduler.state_dict()         
 
             if prefix == None:
                 state_filename = 'checkpoint_'+str(self.it)+'_state.pt'
@@ -203,68 +213,9 @@ class FasterRCNNTrainer(nn.Module):
         if load_train_state == True:
             state_filename = prefix+'_state.pt'
             state_params = torch.load(state_filename)
+            self.it = state_params['it']  
+            self.meters = state_params['meters'] 
             self.optimizer.load_state_dict(state_params['optimizer'])   
             self.scheduler.load_state_dict(state_params['scheduler'])   
-            self.it = state_params['it']  
-            self.loss_meters = state_params['loss_meters']  
+ 
         
-    def val_step(self, img_l, bboxes_gt_l, classes_gt_l):
-        self.model.eval()
-        """
-        TODO:
-            if accuracy > best_acc:
-                call savemodel function
-        """
-        output_size = (config.roi_pool_size, config.roi_pool_size)
-        spatial_scale = 1/config.receptive_field
-        roi_layer = RoIPool(output_size, spatial_scale)
-        
-        for img, bboxes_gt in zip(img_l, bboxes_gt_l):
-            img = img.unsqueeze(0).to(self.device)
-            features = self.model.fe(img)
-            _,_,H,W = img.shape
-            img_size = (H,W)
-
-            anchors = gen_anchors(
-                    img_size, 
-                    receptive_field=16, 
-                    scales=[8,16,32], 
-                    ratios=[0.5,1,2]
-                )           
-            cls_op, reg_op = self.model.rpn(features)
-            cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
-            reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()
-            
-            rois = gen_rois(cls_op.detach(), 
-                            reg_op.detach(), 
-                            anchors, 
-                            img_size
-                        ) # x1, y1, x2, y2
-            
-            im1 = visualize_bboxes(img, bboxes_gt)
-            plt.imshow(im1)
-            plt.show()
-            
-            if len(rois)>0:
-                pool = roi_layer(features, [rois])
-                pool_feats = pool.view(pool.size(0), -1)
-            
-            cls_op, reg_op = self.model.fast_rcnn(pool_feats)
-            
-            if True:
-                classes = torch.argmax(cls_op, axis=1)
-                reg_op = reg_op.view(len(reg_op), -1, 4)
-                reg_op = reg_op[classes>0]
-                reg_op = reg_op[torch.arange(len(reg_op)), classes[classes>0]-1]
-                rois = rois[classes>0]
-                bboxes = reg2bbox(rois, reg_op)
-                cls_op = cls_op[classes>0]
-                fg_scores = cls_op[torch.arange(len(cls_op)),classes[classes>0]-1]
-                indices = nms(bboxes, fg_scores, 0.7)
-                bboxes = bboxes[indices[:10]]
-                classes = classes[classes>0]
-                print(classes[indices[:10]])
-                img_np = visualize_bboxes(img, bboxes.detach())
-                plt.imshow(img_np)
-                plt.show()
-             

@@ -5,7 +5,7 @@ from utils.misc import bbox2reg, obtain_iou_matrix
 from configs import config
 
 def target_gen_fast_rcnn(rois, bboxes_gt, classes_gt):
-    n_samples = int(128/config.batch_size)
+    n_samples = int(128/config.train_batch_size)
     pos_ratio = 0.5
     iou_max = 0.5
     iou_min = 0.0

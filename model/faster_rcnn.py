@@ -6,18 +6,18 @@ from model.rpn import RPN
 from model.fast_rcnn import FastRCNN
 
 class FasterRCNN(nn.Module):
-    def __init__(self, config):
+    def __init__(self, num_classes):
         super().__init__()
         vgg = models.vgg16(pretrained=True, progress=False)
         self.fe = vgg.features[:-1]   
                     
-        self.rpn = RPN(config.in_chan,
-                       config.out_chan,
-                       config.anchors_per_location
+        self.rpn = RPN(in_chan=512,
+                       out_chan=512,
+                       anchors_per_loc=9
                    )
         
         self.fast_rcnn = FastRCNN(vgg.classifier,
-                                  config.num_classes
+                                  num_classes
                               )
 
    
