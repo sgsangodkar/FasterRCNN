@@ -2,10 +2,8 @@
 
 import torch
 from utils.misc import bbox2reg, obtain_iou_matrix
-from configs import config
 
-def target_gen_fast_rcnn(rois, bboxes_gt, classes_gt):
-    n_samples = int(128/config.train_batch_size)
+def target_gen_fast_rcnn(rois, bboxes_gt, classes_gt, n_targets):
     pos_ratio = 0.5
     iou_max = 0.5
     iou_min = 0.0
@@ -16,9 +14,9 @@ def target_gen_fast_rcnn(rois, bboxes_gt, classes_gt):
     pos_indx = torch.where(max_ious>=iou_max)[0]   
     neg_indx = torch.where((max_ious<iou_max)&(max_ious>=iou_min))[0]  
         
-    n_pos_req = int(n_samples*pos_ratio)
+    n_pos_req = int(n_targets*pos_ratio)
     n_pos = min(len(pos_indx), n_pos_req)
-    n_neg_req = n_samples - n_pos
+    n_neg_req = n_targets - n_pos
     n_neg = min(len(neg_indx), n_neg_req)
     
     if len(pos_indx)>0:

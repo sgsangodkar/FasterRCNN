@@ -10,7 +10,6 @@ import numpy as np
 from torchvision.ops import nms
 from utils.misc import bbox2reg, reg2bbox, unmap, obtain_iou_matrix
 import torch.nn.functional as F
-from configs import config
 
 def gen_anchors(img_size, receptive_field, scales, ratios):  
     cx, cy = ((receptive_field-1)/2, (receptive_field-1)/2)  

@@ -48,7 +48,7 @@ voc_dataset = VOCDataset(config.data_path,
                      )
   
 voc_dataloader = DataLoader(voc_dataset, 
-                            batch_size=config.batch_size, 
+                            batch_size=config.train_batch_size, 
                             shuffle=True, 
                             collate_fn = custom_collate,
                             pin_memory=True

@@ -14,14 +14,14 @@ from loss import get_rpn_loss, get_fast_rcnn_loss
 from torchnet.meter import AverageValueMeter
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from torchvision.ops import RoIPool
 from torch.utils.tensorboard import SummaryWriter
 
 
 class FasterRCNNTrainer(nn.Module):
-    def __init__(self, device):
+    def __init__(self, device, batch_size=2):
         super().__init__()
         self.device = device
+        self.batch_size = 2
             
         self.model = FasterRCNN(config.num_classes).to(self.device)
 
@@ -43,13 +43,7 @@ class FasterRCNNTrainer(nn.Module):
                                              gamma=0.1
                                          )
         self.writer = SummaryWriter()
-        
-        self.receptive_field = 16
-        
-        pool_size = 7
-        output_size = (pool_size, pool_size)
-        spatial_scale = 1/self.receptive_field
-        self.roi_layer = RoIPool(output_size, spatial_scale)  
+          
         
     def get_optimizer(self):
         lr = config.lr
@@ -81,7 +75,7 @@ class FasterRCNNTrainer(nn.Module):
             
             anchors = gen_anchors(
                     img_size, 
-                    self.receptive_field, 
+                    receptive_field=16, 
                     scales=[8,16,32], 
                     ratios=[0.5,1,2]
                 ).to(self.device) 
@@ -107,7 +101,7 @@ class FasterRCNNTrainer(nn.Module):
                                           )                              
             
             rpn_loss = cls_loss + 10*reg_loss 
-            rpn_loss = rpn_loss/config.train_batch_size # Loss normalisation
+            rpn_loss = rpn_loss/self.batch_size # Loss normalisation
             
             rpn_loss.backward(retain_graph=True)
             # Graph retained so as to use for fast-rcnn backward pass
@@ -125,17 +119,16 @@ class FasterRCNNTrainer(nn.Module):
         reg_gt_b = []
 
         for data in zip(features_l, rois_l, bboxes_gt_l, classes_gt_l):
-            features = data[0]
-            rois = data[1]
-            bboxes_gt = data[2].to(self.device)
-            classes_gt = data[3].to(self.device)
             
             
-            rois, cls_gt, reg_gt = target_gen_fast_rcnn(rois, 
-                                                        bboxes_gt, 
-                                                        classes_gt
-                                                    )    
-            pool = self.roi_layer(features, [rois])
+            rois, cls_gt, reg_gt = target_gen_fast_rcnn(
+                                        rois = data[1], 
+                                        bboxes_gt = data[2].to(self.device), 
+                                        classes_gt = data[3].to(self.device), 
+                                        n_targets = int(128/self.batch_size)
+                                    )
+                                                      
+            pool = self.model.roi_layer(data[0], [rois])
             pool = pool.view(pool.size(0), -1)
             features_b.append(pool)
             cls_gt_b.append(cls_gt)

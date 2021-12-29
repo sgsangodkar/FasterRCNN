@@ -10,26 +10,20 @@ import torch.nn as nn
 
 class FastRCNN(nn.Module):
     def __init__(self, 
-                 vgg_classifier, 
-                 num_classes
+                 fc_layers, 
+                 num_classes,
+                 pool_size=7, 
+                 receptive_field=16
              ):
         super().__init__()
-        self.fc_layers = vgg_classifier[:-1]
+        self.fc_layers = fc_layers[:-1]
         self.regressor = nn.Linear(4096, num_classes * 4)
         self.classifier = nn.Linear(4096, num_classes+1)
 
         self.num_classes = num_classes
-      
-        """
-        RoIPool
-            def __init__(output_size, spatial_scale):
-            output_size (int or Tuple[int, int]): 
-                The size of the output after pooling
-            spatial_scale (float): 
-                A scaling factor that maps the input coordinates to
-            the box coordinates. Default: 1.0
-        """    
+ 
         self.init_layers()
+    
         
     def init_layers(self):
         self.classifier.weight.data.normal_(0, 0.01)
