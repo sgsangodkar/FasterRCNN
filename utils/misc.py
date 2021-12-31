@@ -8,6 +8,7 @@ Created on Fri Dec 10 12:31:47 2021
 import torch
 import numpy as np
 import cv2
+from dataset.xml_parser import VOC_CLASSES
 
 def obtain_iou_matrix(bbox_a, bbox_b):
     # top left
@@ -84,7 +85,7 @@ def hflip_img(img):
     img = torch.flip(img, dims=[2])
     return img
 
-def visualize_bboxes(img, bboxes):
+def visualize_bboxes(img, bboxes, classes):
     img = img.squeeze().permute(1,2,0).cpu()
     img_np = np.ascontiguousarray(img)
     means = np.array((0.485, 0.456, 0.406))
@@ -92,9 +93,16 @@ def visualize_bboxes(img, bboxes):
     img_np = (img_np*stds)+means
     img_np = np.clip(img_np, 0,1)
     img_np = (img_np*255).astype(np.uint8)
-   
+    
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = 2
+    color = (255, 0, 0)
+    thickness = 2
+    
     for i in range(len(bboxes)):
         x1,y1,x2,y2 = np.array(bboxes[i], dtype=np.uint16)
         img_np = cv2.rectangle(img_np, (x1,y1), (x2,y2), (0,255,0), 3)
+        class_name = VOC_CLASSES[classes[i]]
+        cv2.putText(img_np, class_name, (x1+35, y1+35), font, fontScale, color, thickness)
             
     return img_np.copy()
