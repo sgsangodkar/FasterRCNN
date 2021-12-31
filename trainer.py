@@ -5,25 +5,26 @@ Created on Fri Dec 10 09:14:17 2021
 
 @author: sagar
 """
+import os
 import torch
 import torch.nn as nn
 from model import FasterRCNN
 from utils import gen_anchors, target_gen_rpn, gen_rois, target_gen_fast_rcnn
-from configs import config
 from loss import get_rpn_loss, get_fast_rcnn_loss
 from torchnet.meter import AverageValueMeter
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class FasterRCNNTrainer(nn.Module):
-    def __init__(self, device, batch_size=2):
+    def __init__(self, num_classes, lr=0.001, log=True):
         super().__init__()
-        self.device = device
-        self.batch_size = 2
             
-        self.model = FasterRCNN(config.num_classes).to(self.device)
+        self.model = FasterRCNN(num_classes).to(device)
+        self.lr = lr
+        self.log = log
 
         for layer in self.model.fe[:10]:
             for p in layer.parameters():
@@ -39,25 +40,24 @@ class FasterRCNNTrainer(nn.Module):
         self.optimizer = self.get_optimizer()
         
         self.scheduler = lr_scheduler.StepLR(self.optimizer, 
-                                             step_size=30000, 
+                                             step_size=2, 
                                              gamma=0.1
                                          )
         self.writer = SummaryWriter()
           
         
     def get_optimizer(self):
-        lr = config.lr
         params = []
         for key, value in dict(self.named_parameters()).items():
             if value.requires_grad:
                 if 'fast_rcnn' in key:
                     if 'bias' in key:
-                        params += [{'params': [value], 'lr': lr*2}]
+                        params += [{'params': [value], 'lr': self.lr*2}]
                     else:
-                        params += [{'params': [value], 'lr': lr}]
+                        params += [{'params': [value], 'lr': self.lr}]
 
                 else:    
-                    params += [{'params': [value], 'lr': lr}]
+                    params += [{'params': [value], 'lr': self.lr}]
         
         self.optimizer = optim.SGD(params, 
                                    momentum=0.9,
@@ -68,21 +68,22 @@ class FasterRCNNTrainer(nn.Module):
     
     def rpn_train_step(self, features_l, img_size_l, bboxes_gt_l):
         rois_l = []
+        batch_size = len(features_l)
+        
         for data in zip(features_l, img_size_l, bboxes_gt_l):
             features = data[0]
             img_size = data[1]
-            bboxes_gt = data[2].to(self.device)
+            bboxes_gt = data[2].to(device)
             
             anchors = gen_anchors(
                     img_size, 
                     receptive_field=16, 
                     scales=[8,16,32], 
                     ratios=[0.5,1,2]
-                ).to(self.device) 
+                ).to(device) 
             
             cls_op, reg_op = self.model.rpn(features)
             cls_op = cls_op.permute(0,2,3,1).contiguous().view(1,-1,2).squeeze()
-
             reg_op = reg_op.permute(0,2,3,1).contiguous().view(1,-1,4).squeeze()
             
             rois = gen_rois(cls_op.detach(), 
@@ -95,13 +96,13 @@ class FasterRCNNTrainer(nn.Module):
             cls_gt, reg_gt = target_gen_rpn(anchors, bboxes_gt, img_size)
 
             cls_loss, reg_loss = get_rpn_loss(cls_op, 
-                                              cls_gt.to(self.device), 
+                                              cls_gt.to(device), 
                                               reg_op, 
-                                              reg_gt.to(self.device)
+                                              reg_gt.to(device)
                                           )                              
             
             rpn_loss = cls_loss + 10*reg_loss 
-            rpn_loss = rpn_loss/self.batch_size # Loss normalisation
+            rpn_loss = rpn_loss/batch_size # Loss normalisation
             
             rpn_loss.backward(retain_graph=True)
             # Graph retained so as to use for fast-rcnn backward pass
@@ -117,18 +118,23 @@ class FasterRCNNTrainer(nn.Module):
         features_b = []
         cls_gt_b = []
         reg_gt_b = []
-
-        for data in zip(features_l, rois_l, bboxes_gt_l, classes_gt_l):
-            
+        
+        batch_size = len(features_l)
+        
+        for data in zip(features_l, rois_l, bboxes_gt_l, classes_gt_l):     
+            features = data[0]
+            rois = data[1]
+            bboxes_gt = data[2].to(device)
+            classes_gt = data[3].to(device)
             
             rois, cls_gt, reg_gt = target_gen_fast_rcnn(
-                                        rois = data[1], 
-                                        bboxes_gt = data[2].to(self.device), 
-                                        classes_gt = data[3].to(self.device), 
-                                        n_targets = int(128/self.batch_size)
+                                        rois, 
+                                        bboxes_gt, 
+                                        classes_gt, 
+                                        n_targets = int(128/batch_size)
                                     )
                                                       
-            pool = self.model.roi_layer(data[0], [rois])
+            pool = self.model.roi_layer(features, [rois])
             pool = pool.view(pool.size(0), -1)
             features_b.append(pool)
             cls_gt_b.append(cls_gt)
@@ -149,11 +155,10 @@ class FasterRCNNTrainer(nn.Module):
         
     def train_step(self, img_l, bboxes_gt_l, classes_gt_l):
         self.model.train()
-        self.it += 1
         features_l = []
         img_size_l = []
         for img in img_l:
-            img = img.unsqueeze(0).to(self.device)
+            img = img.unsqueeze(0).to(device)
             features_l.append(self.model.fe(img))
             _,_,H,W = img.shape
             img_size_l.append((H,W))
@@ -167,48 +172,48 @@ class FasterRCNNTrainer(nn.Module):
         self.optimizer.step()
         self.scheduler.step()   
 
-        if config.log:
+        if self.log:
              self.writer.add_scalar('RPN_cls', self.meters['rpn_cls'].mean, self.it)      
              self.writer.add_scalar('RPN_reg', self.meters['rpn_reg'].mean, self.it)      
              self.writer.add_scalar('FastRCNN_cls', self.meters['fast_rcnn_cls'].mean, self.it)      
              self.writer.add_scalar('FastRCNN_reg', self.meters['fast_rcnn_reg'].mean, self.it)      
 
+        self.it += 1
         
-    def save_model(self, prefix=None, save_train_state=False):
+    def save_model(self, path=None):
         model_params = self.model.state_dict()
       
-        if prefix == None:
-            model_filename = 'checkpoint_'+str(self.it)+'_model.pt'
-        else:
-            model_filename = prefix+'_model.pt'
+        if path == None:
+            path = 'checkpoints'
+        
+        if not os.path.exists(path):
+            os.makedirs(path)
+                       
+        model_filename = os.path.join(path,'model_params.pt')
             
         torch.save(model_params, model_filename)
         
-        if save_train_state:
-            state_params = dict()
-            state_params['it'] = self.it
-            state_params['meters'] = self.meters  
-            state_params['optimizer'] = self.optimizer.state_dict()
-            state_params['scheduler'] = self.scheduler.state_dict()         
+        state_params = dict()
+        state_params['it'] = self.it
+        state_params['meters'] = self.meters  
+        state_params['optimizer'] = self.optimizer.state_dict()
+        state_params['scheduler'] = self.scheduler.state_dict()         
 
-            if prefix == None:
-                state_filename = 'checkpoint_'+str(self.it)+'_state.pt'
-            else:
-                state_filename = prefix+'_state.pt'
+        state_filename = os.path.join(path, 'state_params.pt')
+        
+        torch.save(state_params, state_filename)
 
-            torch.save(state_params, state_filename)
-
-    def load_model(self, prefix=None, load_train_state=False):
-        model_filename = prefix+'_model.pt'
+    def load_model(self, path=None):
+        model_filename = os.path.join(path,'model_params.pt')
         model_state_dict = torch.load(model_filename)
         self.model.load_state_dict(model_state_dict)
         
-        if load_train_state == True:
-            state_filename = prefix+'_state.pt'
-            state_params = torch.load(state_filename)
-            self.it = state_params['it']  
-            self.meters = state_params['meters'] 
-            self.optimizer.load_state_dict(state_params['optimizer'])   
-            self.scheduler.load_state_dict(state_params['scheduler'])   
+        state_filename = os.path.join(path,'state_params.pt')
+        state_params = torch.load(state_filename)
+        self.it = state_params['it']  
+        self.meters = state_params['meters'] 
+        self.optimizer.load_state_dict(state_params['optimizer'])   
+        self.scheduler.load_state_dict(state_params['scheduler'])   
+        print('Model and trainer-state loaded')
  
         

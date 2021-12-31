@@ -23,7 +23,8 @@ def obtain_iou_matrix(bbox_a, bbox_b):
 
 def unmap(data, count, index, fill=-1):
     if len(data.shape) == 1:
-        ret = torch.zeros((count,), dtype=data.dtype).to(data.device)
+        ret = torch.zeros((count,), dtype=data.dtype)
+        ret = ret.to(data.device)
         ret.fill_(fill)
         ret[index] = data
     else:

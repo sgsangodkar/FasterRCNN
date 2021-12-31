@@ -55,7 +55,8 @@ def target_gen_rpn(anchors, bboxes_gt, img_size):
     iou_matrix = obtain_iou_matrix(anchors_v, bboxes_gt).cpu()
     
     ## Positive and Negative Anchors Selection
-    cls_gt_v = torch.zeros(len(anchors_v), dtype=torch.int64)   
+    cls_gt_v = torch.zeros(len(anchors_v), dtype=torch.int64) 
+    cls_gt_v.to(anchors.device)
     argmax_iou_per_anchor = torch.argmax(iou_matrix, axis=1)
     max_iou_per_anchor = iou_matrix[np.arange(len(anchors_v)), argmax_iou_per_anchor]
     cls_gt_v[max_iou_per_anchor<0.3] = 0   
@@ -87,6 +88,7 @@ def target_gen_rpn(anchors, bboxes_gt, img_size):
     indx_valid = torch.hstack([pos_indx, neg_indx])
     
     cls_gt_final = torch.zeros(cls_gt.shape, dtype=torch.long)-1
+    cls_gt_final.to(cls_gt.device) 
     cls_gt_final[indx_valid] = cls_gt[indx_valid]
     
     
@@ -104,12 +106,12 @@ def gen_rois(cls_op, reg_op, anchors, img_size):
     bboxes_op[:,2] = torch.clip(bboxes_op[:,2], 0, img_size[1]-1)
     bboxes_op[:,3] = torch.clip(bboxes_op[:,3], 0, img_size[0]-1)
     
-    #min_size = config.roi_pool_size
-    #hs = bboxes_op[:, 3] - bboxes_op[:, 1]
-    #ws = bboxes_op[:, 2] - bboxes_op[:, 0]
-    #keep = torch.where((hs >= min_size) & (ws >= min_size))[0]
-    #bboxes_op = bboxes_op[keep, :]
-    #fg_scores = fg_scores[keep]
+    min_size = 32
+    hs = bboxes_op[:, 3] - bboxes_op[:, 1]
+    ws = bboxes_op[:, 2] - bboxes_op[:, 0]
+    keep = torch.where((hs >= min_size) & (ws >= min_size))[0]
+    bboxes_op = bboxes_op[keep, :]
+    fg_scores = fg_scores[keep]
     
     indices = nms(bboxes_op, fg_scores, nms_thresh)
     rois = bboxes_op[indices[:top_n]]

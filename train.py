@@ -5,9 +5,8 @@ Created on Tue Nov 23 12:33:39 2021
 
 @author: sagar
 """
-
+import os
 import time
-import torch
 from tqdm import tqdm
 from dataset import VOCDataset
 import matplotlib.pyplot as plt
@@ -15,17 +14,14 @@ from torch.utils.data import DataLoader
 from configs import config
 from trainer import FasterRCNNTrainer
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-best_loss = 1e5
-
 since = time.time()
 
- 
-trainer = FasterRCNNTrainer(device)
+trainer = FasterRCNNTrainer(num_classes=config.num_classes, 
+                            lr=config.lr, 
+                            log=config.log)
 
-if config.resume_prefix is not None:
-    trainer.load_model(config.resume_prefix, load_train_state=True)
+if config.resume_path is not None:
+    trainer.load_model(config.resume_path)
   
 
 def custom_collate(batch):
@@ -48,7 +44,7 @@ voc_dataset = VOCDataset(config.data_path,
                      )
   
 voc_dataloader = DataLoader(voc_dataset, 
-                            batch_size=config.train_batch_size, 
+                            batch_size=2, 
                             shuffle=True, 
                             collate_fn = custom_collate,
                             pin_memory=True
@@ -62,8 +58,9 @@ for epoch in range(config.epochs):
         bboxes = data[1]
         classes = data[2]
         trainer.train_step(img, bboxes, classes)
-  
+    path = os.path.join('checkpoints', 'epoch_'+str(epoch))    
+    trainer.save_model(path) 
 
-    prefix = 'trained_final'    
-    trainer.save_model(prefix, save_train_state=True)
+path = os.path.join('checkpoints', 'final')    
+trainer.save_model(path)
 
