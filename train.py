@@ -5,33 +5,24 @@ Created on Tue Nov 23 12:33:39 2021
 
 @author: sagar
 """
-
+import os
 import time
-import torch
 from tqdm import tqdm
 from dataset import VOCDataset
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from configs import config
 from trainer import FasterRCNNTrainer
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-best_loss = 1e5
-
 since = time.time()
-writer = SummaryWriter()
- 
-trainer = FasterRCNNTrainer(device)
 
+trainer = FasterRCNNTrainer(num_classes=config.num_classes, 
+                            lr=config.lr, 
+                            log=config.log)
 
-dataset = VOCDataset(config.data_path, 
-                     config.data_type,
-                     config.min_size, 
-                     config.random_flips
-                 )
-   
+if config.resume_path is not None:
+    trainer.load_model(config.resume_path)
+  
 
 def custom_collate(batch):
     imgs = []
@@ -45,36 +36,31 @@ def custom_collate(batch):
         gt_difficults.append(difficult)
     
     return [imgs, gt_bboxes, gt_classes, gt_difficults]
-  
-dataloader = DataLoader(dataset, 
-                        batch_size=config.batch_size, 
-                        shuffle=True, 
-                        collate_fn = custom_collate,
-                        pin_memory=True
-                   )
 
-state_dict = torch.load("trained_model.pt", map_location=torch.device('cpu'))
-trainer.load_state_dict(state_dict)
-     
-log_step=0   
+voc_dataset = VOCDataset(config.data_path, 
+                         data_type='trainval',
+                         min_size=600, 
+                         random_flips=True
+                     )
+  
+voc_dataloader = DataLoader(voc_dataset, 
+                            batch_size=2, 
+                            shuffle=True, 
+                            collate_fn = custom_collate,
+                            pin_memory=True
+                        )
+
+    
 for epoch in range(config.epochs):
     print("Epoch: {}".format(epoch+1))
-    for data in dataloader:
+    for data in tqdm(voc_dataloader):
         img = data[0]
         bboxes = data[1]
         classes = data[2]
-        
-        #trainer.train_step(img, bboxes, classes)
-        trainer.val_step(img, bboxes, classes)
+        trainer.train_step(img, bboxes, classes)
+    path = os.path.join('checkpoints', 'epoch_'+str(epoch))    
+    trainer.save_model(path) 
 
-        if config.log:
-             writer.add_scalar('RPN_cls', trainer.meters['rpn_cls'].mean, log_step)      
-             writer.add_scalar('RPN_reg', trainer.meters['rpn_reg'].mean, log_step)      
-             writer.add_scalar('FastRCNN_cls', trainer.meters['fast_rcnn_cls'].mean, log_step)      
-             writer.add_scalar('FastRCNN_reg', trainer.meters['fast_rcnn_reg'].mean, log_step)      
-             log_step+=1
-       
-
-    filename = str(epoch+1)+'_checkpoint.pt'    
-    torch.save(trainer.state_dict(), filename)
+path = os.path.join('checkpoints', 'final')    
+trainer.save_model(path)
 
