@@ -11,7 +11,6 @@ import random
 import numpy as np
 from torchvision import transforms
 from torch.utils.data import Dataset
-
 from dataset.xml_parser import ParseGTxmls
 from utils import hflip_bboxes, hflip_img
 
@@ -60,7 +59,7 @@ class Transformer(object):
             if random.random()>0.5:
                 img = hflip_img(img)
                 bboxes = hflip_bboxes(bboxes, (ht_new, wt_new))
-   
+       
         return img, bboxes, classes, difficult
  
     def scale_bboxes(self, bboxes, sx, sy):

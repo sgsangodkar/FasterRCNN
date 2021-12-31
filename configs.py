@@ -14,4 +14,4 @@ class config:
     lr=0.001
     data_path = '../voc2007/VOCdevkit/VOC2007/' 
     log = True
-    resume_path = 'checkpoint_final'
+    resume_path = None

@@ -40,7 +40,7 @@ class FasterRCNNTrainer(nn.Module):
         self.optimizer = self.get_optimizer()
         
         self.scheduler = lr_scheduler.StepLR(self.optimizer, 
-                                             step_size=2, 
+                                             step_size=30000, 
                                              gamma=0.1
                                          )
         self.writer = SummaryWriter()
