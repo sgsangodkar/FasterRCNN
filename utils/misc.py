@@ -96,13 +96,14 @@ def visualize_bboxes(img, bboxes, classes):
     
     font = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 2
-    color = (255, 0, 0)
-    thickness = 2
+    color = (0, 255, 0)
+    thickness = 5
     
     for i in range(len(bboxes)):
         x1,y1,x2,y2 = np.array(bboxes[i], dtype=np.uint16)
         img_np = cv2.rectangle(img_np, (x1,y1), (x2,y2), (0,255,0), 3)
         class_name = VOC_CLASSES[classes[i]]
-        cv2.putText(img_np, class_name, (x1+35, y1+35), font, fontScale, color, thickness)
+        cv2.rectangle(img_np, (x1, y1-75), (x1 + 250, y1), (255,255,255), -1)
+        cv2.putText(img_np, class_name, (x1+35, y1-25), font, fontScale, color, thickness)
             
     return img_np.copy()
